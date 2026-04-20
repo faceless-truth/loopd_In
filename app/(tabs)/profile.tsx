@@ -28,6 +28,7 @@ export default function ProfileScreen() {
   const { data: profile, refetch: refetchProfile } = trpc.profile.get.useQuery();
   const { data: habits } = trpc.habits.list.useQuery();
   const { data: todayLogs } = trpc.logs.todayLogs.useQuery();
+  const { data: streaks } = trpc.habits.streaks.useQuery();
 
   const utils = trpc.useUtils();
   const updateProfileMutation = trpc.profile.setup.useMutation({
@@ -114,6 +115,12 @@ export default function ProfileScreen() {
     todayLogs?.some((l) => l.habitId === h.id)
   ).length ?? 0;
   const totalHabits = habits?.length ?? 0;
+  const activeStreaks = streaks
+    ? Object.values(streaks).filter((s) => s > 0).length
+    : 0;
+  const longestStreak = streaks
+    ? Math.max(0, ...Object.values(streaks))
+    : 0;
 
   return (
     <ScreenContainer>
@@ -251,6 +258,7 @@ export default function ProfileScreen() {
             {[
               { label: "Habits", value: totalHabits },
               { label: "Today", value: `${completedToday}/${totalHabits}` },
+              { label: "🔥 Best Streak", value: longestStreak },
             ].map((stat, i) => (
               <View
                 key={stat.label}

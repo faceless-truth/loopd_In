@@ -16,6 +16,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { trpc } from "@/lib/trpc";
 import { CATEGORY_COLORS, CATEGORY_ICONS, HabitCategory } from "@/shared/types";
 import type { Habit, HabitLog } from "@/drizzle/schema";
+import { PhotoProofSheet } from "@/components/photo-proof-sheet";
 
 function getDayGreeting() {
   const hour = new Date().getHours();
@@ -31,11 +32,13 @@ function formatDate(date: Date) {
 function HabitCard({
   habit,
   todayLog,
+  streak,
   onComplete,
   onPress,
 }: {
   habit: Habit;
   todayLog: HabitLog | undefined;
+  streak: number;
   onComplete: (habit: Habit) => void;
   onPress: (habit: Habit) => void;
 }) {
@@ -106,6 +109,22 @@ function HabitCard({
             {habit.isPrivate && (
               <Text style={{ fontSize: 11, color: colors.muted }}>🔒 Private</Text>
             )}
+            {streak > 0 && (
+              <View
+                style={{
+                  backgroundColor: "#FF5C0020",
+                  borderRadius: 6,
+                  paddingHorizontal: 6,
+                  paddingVertical: 2,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 2,
+                }}
+              >
+                <Text style={{ fontSize: 11 }}>🔥</Text>
+                <Text style={{ fontSize: 11, fontWeight: "700", color: "#FF5C00" }}>{streak}</Text>
+              </View>
+            )}
           </View>
         </View>
 
@@ -175,14 +194,21 @@ export default function TodayScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
+  const [photoProof, setPhotoProof] = useState<{ logId: number; habitTitle: string } | null>(null);
 
   const { data: habits, isLoading: habitsLoading, refetch: refetchHabits } = trpc.habits.list.useQuery();
   const { data: todayLogs, refetch: refetchLogs } = trpc.logs.todayLogs.useQuery();
+  const { data: streaks } = trpc.habits.streaks.useQuery();
   const { data: profile } = trpc.profile.get.useQuery();
 
   const completeMutation = trpc.logs.complete.useMutation({
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
       refetchLogs();
+      // Show photo proof sheet after completion
+      const habit = habits?.find((h) => h.id === variables.habitId);
+      if (data?.logId && habit) {
+        setPhotoProof({ logId: data.logId, habitTitle: habit.title });
+      }
     },
     onError: (err) => {
       Alert.alert("Error", err.message);
@@ -197,7 +223,7 @@ export default function TodayScreen() {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       completeMutation.mutate({ habitId: habit.id, value: 1 });
     },
-    [todayLogs, completeMutation]
+    [todayLogs, completeMutation, habits]
   );
 
   const handleRefresh = useCallback(async () => {
@@ -310,6 +336,7 @@ export default function TodayScreen() {
             <HabitCard
               habit={item}
               todayLog={todayLogs?.find((l) => l.habitId === item.id)}
+              streak={streaks?.[item.id] ?? 0}
               onComplete={handleComplete}
               onPress={(h) => router.push(`/habit/${h.id}` as any)}
             />
@@ -347,6 +374,15 @@ export default function TodayScreen() {
           )
         }
         contentContainerStyle={{ paddingBottom: 100 }}
+      />
+
+      {/* Photo proof bottom sheet */}
+      <PhotoProofSheet
+        visible={photoProof !== null}
+        logId={photoProof?.logId ?? null}
+        habitTitle={photoProof?.habitTitle ?? ""}
+        onClose={() => setPhotoProof(null)}
+        onPhotoUploaded={() => refetchLogs()}
       />
     </ScreenContainer>
   );

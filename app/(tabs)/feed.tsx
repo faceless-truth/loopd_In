@@ -27,10 +27,12 @@ function timeAgo(date: Date | string) {
 
 function ReactionBar({
   logId,
+  logOwnerId,
   reactions,
   currentUserId,
 }: {
   logId: number;
+  logOwnerId: number;
   reactions: Array<{ id: number; logId: number; userId: number; emoji: string }>;
   currentUserId: number;
 }) {
@@ -55,7 +57,7 @@ function ReactionBar({
           key={emoji}
           onPress={async () => {
             await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            toggleMutation.mutate({ logId, emoji });
+            toggleMutation.mutate({ logId, emoji, logOwnerId });
           }}
           style={({ pressed }) => ({
             flexDirection: "row",
@@ -95,7 +97,7 @@ function FeedCard({
 }: {
   item: any;
   currentUserId: number;
-  onCommentPress: (logId: number) => void;
+  onCommentPress: (logId: number, logOwnerId: number) => void;
 }) {
   const colors = useColors();
   const category = (item.habit?.category as HabitCategory) ?? "Other";
@@ -232,12 +234,13 @@ function FeedCard({
       >
         <ReactionBar
           logId={item.log.id}
+          logOwnerId={item.log.userId}
           reactions={item.reactions ?? []}
           currentUserId={currentUserId}
         />
 
         <Pressable
-          onPress={() => onCommentPress(item.log.id)}
+          onPress={() => onCommentPress(item.log.id, item.log.userId)}
           style={({ pressed }) => ({
             flexDirection: "row",
             alignItems: "center",
@@ -307,7 +310,7 @@ export default function FeedScreen() {
           <FeedCard
             item={item}
             currentUserId={user.id}
-            onCommentPress={(logId) => router.push(`/feed/${logId}` as any)}
+            onCommentPress={(logId, logOwnerId) => router.push({ pathname: `/feed/${logId}` as any, params: { logOwnerId: String(logOwnerId) } })}
           />
         )}
         ListEmptyComponent={

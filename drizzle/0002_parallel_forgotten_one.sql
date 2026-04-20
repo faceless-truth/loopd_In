@@ -1,0 +1,1 @@
+ALTER TABLE `user_profiles` ADD `push_token` varchar(300);

@@ -45,6 +45,7 @@ export const userProfiles = mysqlTable("user_profiles", {
   displayName: varchar("displayName", { length: 64 }).notNull(),
   avatarUrl: text("avatarUrl"),
   bio: varchar("bio", { length: 160 }),
+  pushToken: varchar("push_token", { length: 300 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

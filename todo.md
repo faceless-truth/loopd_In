@@ -84,3 +84,28 @@
 - [ ] Weekly habit frequency tracking
 - [ ] Leaderboard / challenge system
 - [ ] Settings screen (dark mode toggle)
+
+## New Features (Round 2)
+
+### Photo Proof on Completion
+- [x] Photo proof bottom sheet component (camera / gallery / skip options)
+- [x] Trigger bottom sheet after marking habit as complete on dashboard
+- [x] Upload selected photo to server storage (base64 → tRPC logs.uploadPhoto)
+- [x] Display photo thumbnail in feed cards and habit detail screen
+
+### Streak Counters
+- [x] Add streak calculation helper in server/db.ts (consecutive days with a log)
+- [x] Add tRPC route: habits.streaks (returns streak count per habit for current user)
+- [x] Display streak badge (🔥 N) on habit cards in dashboard
+- [x] Display streak on habit detail screen
+- [x] Display total active streaks count on profile screen
+
+### Push Notifications
+- [x] Read Expo notifications DOCS.md
+- [x] Register push token on app launch (expo-notifications)
+- [x] Save push token to user profile in DB (add pushToken column)
+- [x] Add server helper: sendPushNotification(userId, title, body)
+- [x] Trigger notification when friend reacts to your habit log
+- [x] Trigger notification when friend comments on your habit log
+- [x] Trigger notification when someone sends you a friend request
+- [x] Handle notification tap → navigate to relevant screen

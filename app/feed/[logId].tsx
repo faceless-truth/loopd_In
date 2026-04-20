@@ -26,8 +26,9 @@ function timeAgo(date: Date | string) {
 }
 
 export default function FeedDetailScreen() {
-  const { logId } = useLocalSearchParams<{ logId: string }>();
+  const { logId, logOwnerId } = useLocalSearchParams<{ logId: string; logOwnerId?: string }>();
   const logIdNum = parseInt(logId, 10);
+  const logOwnerIdNum = logOwnerId ? parseInt(logOwnerId, 10) : undefined;
   const colors = useColors();
   const router = useRouter();
   const { user } = useAuth();
@@ -46,7 +47,7 @@ export default function FeedDetailScreen() {
     const text = comment.trim();
     if (!text) return;
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    addMutation.mutate({ logId: logIdNum, content: text });
+    addMutation.mutate({ logId: logIdNum, content: text, logOwnerId: logOwnerIdNum });
   };
 
   return (

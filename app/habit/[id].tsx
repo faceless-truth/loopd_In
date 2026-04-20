@@ -33,6 +33,7 @@ export default function HabitDetailScreen() {
   const { data: habits, isLoading } = trpc.habits.list.useQuery();
   const { data: logs, refetch: refetchLogs } = trpc.logs.getForHabit.useQuery({ habitId, limit: 30 });
   const { data: todayLogs, refetch: refetchToday } = trpc.logs.todayLogs.useQuery();
+  const { data: streaks } = trpc.habits.streaks.useQuery();
 
   const utils = trpc.useUtils();
   const deleteMutation = trpc.habits.delete.useMutation({
@@ -89,7 +90,8 @@ export default function HabitDetailScreen() {
     );
   }
 
-  const streak = logs?.length ?? 0;
+  const streak = streaks?.[habitId] ?? 0;
+  const totalLogs = logs?.length ?? 0;
 
   return (
     <ScreenContainer>
@@ -172,10 +174,11 @@ export default function HabitDetailScreen() {
                     gap: 4,
                   }}
                 >
+                  <Text style={{ fontSize: 22 }}>🔥</Text>
                   <Text style={{ fontSize: 24, fontWeight: "700", color: "#FF5C00" }}>
                     {streak}
                   </Text>
-                  <Text style={{ fontSize: 12, color: colors.muted }}>Total logs</Text>
+                  <Text style={{ fontSize: 12, color: colors.muted }}>Day streak</Text>
                 </View>
                 <View
                   style={{

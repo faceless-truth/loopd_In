@@ -10,6 +10,7 @@ import "@/lib/_core/nativewind-pressable";
 import { ThemeProvider } from "@/lib/theme-provider";
 import { useAuth } from "@/hooks/use-auth";
 import { trpc as trpcHook } from "@/lib/trpc";
+import { usePushNotifications } from "@/hooks/use-push-notifications";
 import {
   SafeAreaFrameContext,
   SafeAreaInsetsContext,
@@ -33,6 +34,9 @@ function AuthRedirect() {
   const segments = useSegments();
   const router = useRouter();
   const profileQuery = trpcHook.profile.get.useQuery(undefined, { enabled: !!user });
+
+  // Register push token and handle notification deep links when user is authenticated
+  usePushNotifications();
 
   useEffect(() => {
     if (loading) return;

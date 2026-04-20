@@ -5,6 +5,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import * as db from "./db";
 import { storagePut } from "./storage";
+import { sendPushNotification } from "./push";
 
 export const appRouter = router({
   system: systemRouter,
@@ -36,6 +37,13 @@ export const appRouter = router({
           avatarUrl: input.avatarUrl,
           bio: input.bio,
         });
+        return { success: true };
+      }),
+
+    registerPushToken: protectedProcedure
+      .input(z.object({ token: z.string().min(1) }))
+      .mutation(async ({ ctx, input }) => {
+        await db.savePushToken(ctx.user.id, input.token);
         return { success: true };
       }),
 
@@ -79,6 +87,9 @@ export const appRouter = router({
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(({ ctx, input }) => db.deleteHabit(input.id, ctx.user.id)),
+
+    streaks: protectedProcedure
+      .query(({ ctx }) => db.getUserHabitStreaks(ctx.user.id)),
   }),
 
   logs: router({
@@ -90,9 +101,10 @@ export const appRouter = router({
         value: z.number().int().min(1).default(1),
         notes: z.string().max(500).optional(),
       }))
-      .mutation(({ ctx, input }) =>
-        db.logHabitCompletion({ ...input, userId: ctx.user.id })
-      ),
+      .mutation(async ({ ctx, input }) => {
+        const logId = await db.logHabitCompletion({ ...input, userId: ctx.user.id });
+        return { logId };
+      }),
 
     getForHabit: protectedProcedure
       .input(z.object({ habitId: z.number(), limit: z.number().int().max(100).default(30) }))
@@ -134,10 +146,26 @@ export const appRouter = router({
 
   reactions: router({
     toggle: protectedProcedure
-      .input(z.object({ logId: z.number(), emoji: z.string().max(8) }))
-      .mutation(({ ctx, input }) =>
-        db.toggleReaction({ logId: input.logId, userId: ctx.user.id, emoji: input.emoji })
-      ),
+      .input(z.object({ logId: z.number(), emoji: z.string().max(8), logOwnerId: z.number().optional() }))
+      .mutation(async ({ ctx, input }) => {
+        const added = await db.toggleReaction({ logId: input.logId, userId: ctx.user.id, emoji: input.emoji });
+        // Notify the log owner when someone reacts (not self-reactions)
+        if (added && input.logOwnerId && input.logOwnerId !== ctx.user.id) {
+          const [reactorProfile, ownerToken] = await Promise.all([
+            db.getUserProfile(ctx.user.id),
+            db.getPushToken(input.logOwnerId),
+          ]);
+          if (reactorProfile && ownerToken) {
+            await sendPushNotification(
+              ownerToken,
+              `${reactorProfile.displayName} reacted ${input.emoji}`,
+              "Tap to see your habit post",
+              { url: `/feed/${input.logId}` }
+            );
+          }
+        }
+        return added;
+      }),
   }),
 
   comments: router({
@@ -146,10 +174,27 @@ export const appRouter = router({
       .query(({ input }) => db.getCommentsForLog(input.logId)),
 
     add: protectedProcedure
-      .input(z.object({ logId: z.number(), content: z.string().min(1).max(500) }))
-      .mutation(({ ctx, input }) =>
-        db.addComment({ logId: input.logId, userId: ctx.user.id, content: input.content })
-      ),
+      .input(z.object({ logId: z.number(), content: z.string().min(1).max(500), logOwnerId: z.number().optional() }))
+      .mutation(async ({ ctx, input }) => {
+        const commentId = await db.addComment({ logId: input.logId, userId: ctx.user.id, content: input.content });
+        // Notify the log owner when someone comments (not self-comments)
+        if (input.logOwnerId && input.logOwnerId !== ctx.user.id) {
+          const [commenterProfile, ownerToken] = await Promise.all([
+            db.getUserProfile(ctx.user.id),
+            db.getPushToken(input.logOwnerId),
+          ]);
+          if (commenterProfile && ownerToken) {
+            const preview = input.content.length > 60 ? input.content.slice(0, 57) + "..." : input.content;
+            await sendPushNotification(
+              ownerToken,
+              `${commenterProfile.displayName} commented`,
+              preview,
+              { url: `/feed/${input.logId}` }
+            );
+          }
+        }
+        return commentId;
+      }),
   }),
 
   friends: router({
@@ -175,11 +220,43 @@ export const appRouter = router({
 
     sendRequest: protectedProcedure
       .input(z.object({ friendId: z.number() }))
-      .mutation(({ ctx, input }) => db.sendFriendRequest(ctx.user.id, input.friendId)),
+      .mutation(async ({ ctx, input }) => {
+        await db.sendFriendRequest(ctx.user.id, input.friendId);
+        // Notify the recipient of the friend request
+        const [senderProfile, recipientToken] = await Promise.all([
+          db.getUserProfile(ctx.user.id),
+          db.getPushToken(input.friendId),
+        ]);
+        if (senderProfile && recipientToken) {
+          await sendPushNotification(
+            recipientToken,
+            "New friend request",
+            `${senderProfile.displayName} (@${senderProfile.username}) wants to be your friend`,
+            { url: "/(tabs)/friends" }
+          );
+        }
+      }),
 
     acceptRequest: protectedProcedure
-      .input(z.object({ requestId: z.number() }))
-      .mutation(({ ctx, input }) => db.acceptFriendRequest(input.requestId, ctx.user.id)),
+      .input(z.object({ requestId: z.number(), requesterId: z.number().optional() }))
+      .mutation(async ({ ctx, input }) => {
+        await db.acceptFriendRequest(input.requestId, ctx.user.id);
+        // Notify the original requester that their request was accepted
+        if (input.requesterId && input.requesterId !== ctx.user.id) {
+          const [acceptorProfile, requesterToken] = await Promise.all([
+            db.getUserProfile(ctx.user.id),
+            db.getPushToken(input.requesterId),
+          ]);
+          if (acceptorProfile && requesterToken) {
+            await sendPushNotification(
+              requesterToken,
+              "Friend request accepted! 🎉",
+              `${acceptorProfile.displayName} accepted your friend request`,
+              { url: "/(tabs)/friends" }
+            );
+          }
+        }
+      }),
 
     status: protectedProcedure
       .input(z.object({ otherUserId: z.number() }))

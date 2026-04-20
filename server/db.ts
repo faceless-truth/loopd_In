@@ -96,6 +96,19 @@ export async function upsertUserProfile(data: InsertUserProfile): Promise<void> 
   });
 }
 
+export async function savePushToken(userId: number, pushToken: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(userProfiles).set({ pushToken }).where(eq(userProfiles.userId, userId));
+}
+
+export async function getPushToken(userId: number): Promise<string | null | undefined> {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select({ pushToken: userProfiles.pushToken }).from(userProfiles).where(eq(userProfiles.userId, userId)).limit(1);
+  return result[0]?.pushToken;
+}
+
 export async function searchUserProfiles(query: string, excludeUserId: number): Promise<UserProfile[]> {
   const db = await getDb();
   if (!db) return [];
@@ -254,6 +267,76 @@ export async function getReactionsForLogs(logIds: number[]): Promise<Reaction[]>
   const db = await getDb();
   if (!db || logIds.length === 0) return [];
   return db.select().from(reactions).where(inArray(reactions.logId, logIds));
+}
+
+// ─── Streaks ─────────────────────────────────────────────────────────────────
+
+/**
+ * Calculate the current streak for a habit: consecutive days ending today (or yesterday)
+ * where at least one log exists.
+ */
+export async function getHabitStreak(habitId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+
+  const logs = await db
+    .select({ completedAt: habitLogs.completedAt })
+    .from(habitLogs)
+    .where(eq(habitLogs.habitId, habitId))
+    .orderBy(desc(habitLogs.completedAt));
+
+  if (logs.length === 0) return 0;
+
+  // Build a set of unique date strings (YYYY-MM-DD)
+  const logDates = new Set(
+    logs.map((l) => {
+      const d = new Date(l.completedAt);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    })
+  );
+
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+
+  // Start from today; if today has no log, start from yesterday
+  let streak = 0;
+  const cursor = new Date(today);
+  if (!logDates.has(todayStr)) {
+    cursor.setDate(cursor.getDate() - 1);
+  }
+
+  while (true) {
+    const dateStr = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(cursor.getDate()).padStart(2, "0")}`;
+    if (!logDates.has(dateStr)) break;
+    streak++;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+
+  return streak;
+}
+
+/**
+ * Get streak counts for all habits of a user in one call.
+ * Returns a map of habitId → streak count.
+ */
+export async function getUserHabitStreaks(userId: number): Promise<Record<number, number>> {
+  const db = await getDb();
+  if (!db) return {};
+
+  const userHabits = await db
+    .select({ id: habits.id })
+    .from(habits)
+    .where(and(eq(habits.userId, userId), eq(habits.isArchived, false)));
+
+  if (userHabits.length === 0) return {};
+
+  const streaks: Record<number, number> = {};
+  await Promise.all(
+    userHabits.map(async (h) => {
+      streaks[h.id] = await getHabitStreak(h.id);
+    })
+  );
+  return streaks;
 }
 
 // ─── Comments ─────────────────────────────────────────────────────────────────

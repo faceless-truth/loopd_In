@@ -360,7 +360,7 @@ export default function FriendsScreen() {
                 </Text>
               </View>
               <Pressable
-                onPress={() => acceptRequestMutation.mutate({ requestId: (item as any).requestId })}
+                onPress={() => acceptRequestMutation.mutate({ requestId: (item as any).requestId, requesterId: (item as any).userId })}
                 disabled={acceptRequestMutation.isPending}
                 style={({ pressed }) => ({
                   backgroundColor: pressed ? "#E05200" : "#FF5C00",
