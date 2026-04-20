@@ -32,7 +32,7 @@ const env = {
   appSlug: "accountable",
   // S3 URL of the app logo - set this to the URL returned by generate_image when creating custom logo
   // Leave empty to use the default icon from assets/images/icon.png
-  logoUrl: "",
+  logoUrl: "https://d2xsxph8kpxj0f.cloudfront.net/310519663335455300/eEwWyPnnVHoRpc94TJ2rQE/accountable-icon-FEWyoqQ7bzT9tJeSUjZLQp.png",
   scheme: schemeFromBundleId,
   iosBundleId: bundleId,
   androidPackage: bundleId,

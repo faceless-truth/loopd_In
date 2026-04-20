@@ -1,6 +1,6 @@
 import "@/global.css";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -8,6 +8,8 @@ import "react-native-reanimated";
 import { Platform } from "react-native";
 import "@/lib/_core/nativewind-pressable";
 import { ThemeProvider } from "@/lib/theme-provider";
+import { useAuth } from "@/hooks/use-auth";
+import { trpc as trpcHook } from "@/lib/trpc";
 import {
   SafeAreaFrameContext,
   SafeAreaInsetsContext,
@@ -25,6 +27,30 @@ const DEFAULT_WEB_FRAME: Rect = { x: 0, y: 0, width: 0, height: 0 };
 export const unstable_settings = {
   anchor: "(tabs)",
 };
+
+function AuthRedirect() {
+  const { user, loading } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
+  const profileQuery = trpcHook.profile.get.useQuery(undefined, { enabled: !!user });
+
+  useEffect(() => {
+    if (loading) return;
+    const inAuthGroup = segments[0] === "(auth)";
+    const inOAuthGroup = segments[0] === "oauth";
+    const inProfileSetup = segments[0] === "profile" && segments[1] === "setup";
+
+    if (!user && !inAuthGroup && !inOAuthGroup) {
+      router.replace("/(auth)/login" as any);
+    } else if (user && inAuthGroup) {
+      router.replace("/(tabs)" as any);
+    } else if (user && !profileQuery.isLoading && !profileQuery.data && !inProfileSetup && !inAuthGroup && !inOAuthGroup) {
+      router.replace("/profile/setup" as any);
+    }
+  }, [user, loading, segments, profileQuery.data, profileQuery.isLoading]);
+
+  return null;
+}
 
 export default function RootLayout() {
   const initialInsets = initialWindowMetrics?.insets ?? DEFAULT_WEB_INSETS;
@@ -85,9 +111,16 @@ export default function RootLayout() {
           {/* Default to hiding native headers so raw route segments don't appear (e.g. "(tabs)", "products/[id]"). */}
           {/* If a screen needs the native header, explicitly enable it and set a human title via Stack.Screen options. */}
           {/* in order for ios apps tab switching to work properly, use presentation: "fullScreenModal" for login page, whenever you decide to use presentation: "modal*/}
+          <AuthRedirect />
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="(auth)" />
             <Stack.Screen name="oauth/callback" />
+            <Stack.Screen name="habit/create" options={{ presentation: "modal" }} />
+            <Stack.Screen name="habit/[id]" />
+            <Stack.Screen name="feed/[logId]" />
+            <Stack.Screen name="profile/setup" />
+            <Stack.Screen name="profile/[userId]" />
           </Stack>
           <StatusBar style="auto" />
         </QueryClientProvider>

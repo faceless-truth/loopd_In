@@ -9,21 +9,54 @@ type IconMapping = Record<SymbolViewProps["name"], ComponentProps<typeof Materia
 type IconSymbolName = keyof typeof MAPPING;
 
 /**
- * Add your SF Symbols to Material Icons mappings here.
- * - see Material Icons in the [Icons Directory](https://icons.expo.fyi).
- * - see SF Symbols in the [SF Symbols](https://developer.apple.com/sf-symbols/) app.
+ * SF Symbols to Material Icons mappings for Accountable.
  */
 const MAPPING = {
+  // Navigation / Tab bar
   "house.fill": "home",
-  "paperplane.fill": "send",
-  "chevron.left.forwardslash.chevron.right": "code",
+  "newspaper.fill": "dynamic-feed",
+  "person.2.fill": "people",
+  "person.fill": "person",
+  // Actions
+  "plus": "add",
+  "plus.circle.fill": "add-circle",
+  "checkmark": "check",
+  "checkmark.circle.fill": "check-circle",
+  "checkmark.circle": "radio-button-unchecked",
+  "xmark": "close",
+  "xmark.circle.fill": "cancel",
+  "pencil": "edit",
+  "trash": "delete",
+  "camera.fill": "camera-alt",
+  "photo": "photo-library",
+  "arrow.right": "arrow-forward",
+  "arrow.left": "arrow-back",
   "chevron.right": "chevron-right",
-} as IconMapping;
+  "chevron.left": "chevron-left",
+  "chevron.left.forwardslash.chevron.right": "code",
+  "paperplane.fill": "send",
+  // Social
+  "heart.fill": "favorite",
+  "heart": "favorite-border",
+  "bubble.left.fill": "chat-bubble",
+  "bubble.left": "chat-bubble-outline",
+  "person.badge.plus": "person-add",
+  "person.badge.checkmark": "how-to-reg",
+  // Misc
+  "flame.fill": "local-fire-department",
+  "star.fill": "star",
+  "gear": "settings",
+  "bell.fill": "notifications",
+  "magnifyingglass": "search",
+  "lock.fill": "lock",
+  "globe": "public",
+  "photo.fill": "image",
+  "ellipsis": "more-horiz",
+  "ellipsis.circle": "more-horiz",
+} as unknown as IconMapping;
 
 /**
  * An icon component that uses native SF Symbols on iOS, and Material Icons on Android and web.
- * This ensures a consistent look across platforms, and optimal resource usage.
- * Icon `name`s are based on SF Symbols and require manual mapping to Material Icons.
  */
 export function IconSymbol({
   name,
