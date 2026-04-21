@@ -16,7 +16,7 @@ function PendingBadge() {
         position: "absolute",
         top: -4,
         right: -8,
-        backgroundColor: "#FF5C00",
+        backgroundColor: "#7EB8F7",
         borderRadius: 8,
         minWidth: 16,
         height: 16,
@@ -83,6 +83,15 @@ export default function TabLayout() {
               <IconSymbol size={26} name="person.2.fill" color={color} />
               <PendingBadge />
             </View>
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="challenges"
+        options={{
+          title: "Challenges",
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={26} name="trophy.fill" color={color} />
           ),
         }}
       />

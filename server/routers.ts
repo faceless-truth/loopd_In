@@ -67,7 +67,10 @@ export const appRouter = router({
         customDays: z.string().optional(),
         targetType: z.enum(["boolean", "numeric"]).default("boolean"),
         targetValue: z.number().int().min(1).default(1),
+        subGoalSteps: z.number().int().min(1).default(1),
         isPrivate: z.boolean().default(false),
+        timeOfDay: z.enum(["any_time", "morning", "afternoon", "nighttime", "custom"]).default("any_time"),
+        customTime: z.string().max(5).optional(),
       }))
       .mutation(({ ctx, input }) => db.createHabit({ ...input, userId: ctx.user.id })),
 
@@ -261,6 +264,116 @@ export const appRouter = router({
     status: protectedProcedure
       .input(z.object({ otherUserId: z.number() }))
       .query(({ ctx, input }) => db.getFriendshipStatus(ctx.user.id, input.otherUserId)),
+  }),
+
+  challenges: router({
+    list: protectedProcedure.query(({ ctx }) => db.getChallengesForUser(ctx.user.id)),
+
+    create: protectedProcedure
+      .input(z.object({
+        title: z.string().min(1).max(128),
+        description: z.string().max(500).optional(),
+        metric: z.string().min(1).max(128),
+        targetValue: z.number().int().min(1).default(1),
+        targetType: z.enum(["boolean", "numeric"]).default("boolean"),
+        startDate: z.string(),
+        endDate: z.string(),
+        inviteUserIds: z.array(z.number()).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const challengeId = await db.createChallenge({
+          creatorId: ctx.user.id,
+          title: input.title,
+          description: input.description,
+          metric: input.metric,
+          targetValue: input.targetValue,
+          targetType: input.targetType,
+          startDate: input.startDate,
+          endDate: input.endDate,
+        });
+        // Invite friends
+        if (input.inviteUserIds && input.inviteUserIds.length > 0) {
+          await Promise.all(
+            input.inviteUserIds.map(async (userId) => {
+              await db.inviteToChallenge(challengeId, userId);
+              const [token, creatorProfile] = await Promise.all([
+                db.getPushToken(userId),
+                db.getUserProfile(ctx.user.id),
+              ]);
+              if (token && creatorProfile) {
+                await sendPushNotification(
+                  token,
+                  "Challenge invite! 🏆",
+                  `${creatorProfile.displayName} invited you to: ${input.title}`,
+                  { url: "/(tabs)/challenges" }
+                );
+              }
+            })
+          );
+        }
+        return { challengeId };
+      }),
+
+    respond: protectedProcedure
+      .input(z.object({ challengeId: z.number(), accept: z.boolean() }))
+      .mutation(({ ctx, input }) => db.respondToChallenge(input.challengeId, ctx.user.id, input.accept)),
+
+    logProgress: protectedProcedure
+      .input(z.object({ challengeId: z.number(), increment: z.number().int().min(1).default(1) }))
+      .mutation(({ ctx, input }) => db.logChallengeProgress(input.challengeId, ctx.user.id, input.increment)),
+
+    leaderboard: protectedProcedure
+      .input(z.object({ challengeId: z.number() }))
+      .query(({ input }) => db.getChallengeLeaderboard(input.challengeId)),
+
+    get: protectedProcedure
+      .input(z.object({ challengeId: z.number() }))
+      .query(({ input }) => db.getChallengeById(input.challengeId)),
+  }),
+
+  settings: router({
+    get: protectedProcedure.query(({ ctx }) => db.getUserSettings(ctx.user.id)),
+
+    update: protectedProcedure
+      .input(z.object({ foodPhotoEnabled: z.boolean().optional() }))
+      .mutation(async ({ ctx, input }) => {
+        await db.upsertUserSettings(ctx.user.id, input);
+        return { success: true };
+      }),
+  }),
+
+  foodLogs: router({
+    list: protectedProcedure
+      .input(z.object({ date: z.string().optional() }))
+      .query(({ ctx, input }) => db.getFoodLogs(ctx.user.id, input.date)),
+
+    add: protectedProcedure
+      .input(z.object({
+        mealType: z.enum(["breakfast", "lunch", "dinner", "snack"]),
+        photoBase64: z.string().optional(),
+        mimeType: z.string().optional(),
+        notes: z.string().max(500).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        let photoUrl: string | undefined;
+        if (input.photoBase64 && input.mimeType) {
+          const buf = Buffer.from(input.photoBase64, "base64");
+          const stored = await storagePut(`food/${ctx.user.id}/${Date.now()}`, buf, input.mimeType);
+          photoUrl = stored.url;
+        }
+        const logId = await db.addFoodLog({
+          userId: ctx.user.id,
+          mealType: input.mealType,
+          photoUrl: photoUrl ?? null,
+          notes: input.notes ?? null,
+          loggedAt: new Date(),
+        });
+        return { logId, photoUrl };
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ logId: z.number() }))
+      .mutation(({ ctx, input }) => db.deleteFoodLog(input.logId, ctx.user.id)),
   }),
 });
 

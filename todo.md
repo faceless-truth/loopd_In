@@ -109,3 +109,38 @@
 - [x] Trigger notification when friend comments on your habit log
 - [x] Trigger notification when someone sends you a friend request
 - [x] Handle notification tap → navigate to relevant screen
+
+## Round 3 — Brooke's Notes (Loopd In Rebrand + New Features)
+
+### Rebrand
+- [x] Rename app to "Loopd In"
+- [x] Generate new logo: minimalistic, pastel blue and purple
+- [x] Update theme colors to pastel blue/purple palette
+- [x] Update app.config.ts app name
+
+### Habit Enhancements
+- [x] Add time-of-day field to habits (Any Time / Morning / Afternoon / Nighttime / Custom time)
+- [x] Sort habits on dashboard by scheduled time of day
+- [x] Add sub-goal steps to numeric habits (e.g. 1L → 2L → 3L water ticks)
+- [x] Display sub-goal progress on habit card (e.g. 2/3 steps completed)
+- [x] Allow numeric value entry on habit completion (manual step count entry)
+
+### Habit Analytics
+- [x] Monthly/weekly breakdown view on habit detail screen
+- [x] Average calculation for numeric habits (e.g. average daily steps)
+- [x] Visual calendar/grid showing completion history
+
+### Challenges
+- [x] Challenges tab or section in app
+- [x] Create challenge screen (name, goal metric, start/end date, invite friends)
+- [x] Challenge DB schema (challenges, challenge_participants tables)
+- [x] Invite friends to a challenge
+- [x] Challenge leaderboard (ranked by completion count)
+- [ ] Challenge habit auto-populates in participants' personal habits (backlog)
+
+### Food Photo Feature (Opt-in)
+- [x] Settings screen with Food Photo toggle (opt-in/opt-out)
+- [x] Food log screen (breakfast, lunch, dinner, snacks sections)
+- [x] Take/upload photo for each meal
+- [ ] AI-powered food breakdown (send photo to LLM, display macros/summary) (backlog)
+- [x] Food log accessible from profile or separate tab

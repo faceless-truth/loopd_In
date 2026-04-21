@@ -1,6 +1,8 @@
 import { and, desc, eq, inArray, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
+  Challenge,
+  ChallengeParticipant,
   Comment,
   Friendship,
   Habit,
@@ -14,12 +16,16 @@ import {
   InsertUserProfile,
   Reaction,
   UserProfile,
+  challengeParticipants,
+  challenges,
   comments,
+  foodLogs,
   friendships,
   habitLogs,
   habits,
   reactions,
   userProfiles,
+  userSettings,
   users,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
@@ -369,4 +375,173 @@ export async function getCommentCountsForLogs(logIds: number[]): Promise<Record<
     counts[row.logId] = (counts[row.logId] ?? 0) + 1;
   }
   return counts;
+}
+
+// ─── Challenges ───────────────────────────────────────────────────────────────
+
+export async function createChallenge(data: {
+  creatorId: number;
+  title: string;
+  description?: string;
+  metric: string;
+  targetValue: number;
+  targetType: "boolean" | "numeric";
+  startDate: string;
+  endDate: string;
+}): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(challenges).values({
+    creatorId: data.creatorId,
+    title: data.title,
+    description: data.description ?? null,
+    metric: data.metric,
+    targetValue: data.targetValue,
+    targetType: data.targetType,
+    startDate: new Date(data.startDate),
+    endDate: new Date(data.endDate),
+    isActive: true,
+  });
+  const challengeId = (result as any)[0].insertId as number;
+  // Creator auto-joins
+  await db.insert(challengeParticipants).values({
+    challengeId,
+    userId: data.creatorId,
+    completionCount: 0,
+    status: "joined",
+  });
+  return challengeId;
+}
+
+export async function inviteToChallenge(challengeId: number, userId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  // Upsert: if already exists, ignore
+  await db.insert(challengeParticipants).values({
+    challengeId,
+    userId,
+    completionCount: 0,
+    status: "invited",
+  }).onDuplicateKeyUpdate({ set: { status: "invited" } });
+}
+
+export async function respondToChallenge(challengeId: number, userId: number, accept: boolean): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(challengeParticipants)
+    .set({ status: accept ? "joined" : "declined", joinedAt: accept ? new Date() : null })
+    .where(and(eq(challengeParticipants.challengeId, challengeId), eq(challengeParticipants.userId, userId)));
+}
+
+export async function logChallengeProgress(challengeId: number, userId: number, increment: number = 1): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const rows = await db.select().from(challengeParticipants)
+    .where(and(eq(challengeParticipants.challengeId, challengeId), eq(challengeParticipants.userId, userId)));
+  if (rows.length === 0) return;
+  const current = rows[0].completionCount ?? 0;
+  await db.update(challengeParticipants)
+    .set({ completionCount: current + increment })
+    .where(and(eq(challengeParticipants.challengeId, challengeId), eq(challengeParticipants.userId, userId)));
+}
+
+export async function getChallengesForUser(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  // Challenges where user is a participant (joined or invited)
+  const rows = await db
+    .select({ challenge: challenges, participant: challengeParticipants })
+    .from(challengeParticipants)
+    .innerJoin(challenges, eq(challengeParticipants.challengeId, challenges.id))
+    .where(eq(challengeParticipants.userId, userId))
+    .orderBy(challenges.createdAt);
+  return rows.map((r) => ({ ...r.challenge, myStatus: r.participant.status, myCount: r.participant.completionCount }));
+}
+
+export async function getChallengeLeaderboard(challengeId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select({ participant: challengeParticipants, profile: userProfiles })
+    .from(challengeParticipants)
+    .leftJoin(userProfiles, eq(challengeParticipants.userId, userProfiles.userId))
+    .where(and(
+      eq(challengeParticipants.challengeId, challengeId),
+      eq(challengeParticipants.status, "joined")
+    ))
+    .orderBy(challengeParticipants.completionCount);
+  return rows
+    .map((r) => ({
+      userId: r.participant.userId,
+      completionCount: r.participant.completionCount ?? 0,
+      displayName: r.profile?.displayName ?? "Unknown",
+      avatarUrl: r.profile?.avatarUrl ?? null,
+      username: r.profile?.username ?? null,
+    }))
+    .sort((a, b) => b.completionCount - a.completionCount);
+}
+
+export async function getChallengeById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(challenges).where(eq(challenges.id, id));
+  return rows[0] ?? null;
+}
+
+// ─── User Settings ────────────────────────────────────────────────────────────
+
+export async function getUserSettings(userId: number) {
+  const db = await getDb();
+  if (!db) return { userId, foodPhotoEnabled: false };
+  const rows = await db.select().from(userSettings).where(eq(userSettings.userId, userId));
+  if (rows.length === 0) return { userId, foodPhotoEnabled: false };
+  return rows[0];
+}
+
+export async function upsertUserSettings(userId: number, data: { foodPhotoEnabled?: boolean }): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(userSettings).values({
+    userId,
+    foodPhotoEnabled: data.foodPhotoEnabled ?? false,
+  }).onDuplicateKeyUpdate({
+    set: {
+      ...(data.foodPhotoEnabled !== undefined ? { foodPhotoEnabled: data.foodPhotoEnabled } : {}),
+    },
+  });
+}
+
+// ─── Food Logs ────────────────────────────────────────────────────────────────
+
+export async function addFoodLog(data: {
+  userId: number;
+  mealType: "breakfast" | "lunch" | "dinner" | "snack";
+  photoUrl: string | null;
+  notes: string | null;
+  loggedAt: Date;
+}): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(foodLogs).values(data);
+  return (result as any)[0].insertId as number;
+}
+
+export async function getFoodLogs(userId: number, date?: string) {
+  const db = await getDb();
+  if (!db) return [];
+  let query = db.select().from(foodLogs).where(eq(foodLogs.userId, userId)).$dynamic();
+  if (date) {
+    // Filter by date (YYYY-MM-DD) using loggedAt
+    const start = new Date(date + "T00:00:00.000Z");
+    const end = new Date(date + "T23:59:59.999Z");
+    const { gte, lte } = await import("drizzle-orm").then((m) => m);
+    query = query.where(and(eq(foodLogs.userId, userId), gte(foodLogs.loggedAt, start), lte(foodLogs.loggedAt, end)));
+  }
+  return query.orderBy(foodLogs.loggedAt);
+}
+
+export async function deleteFoodLog(logId: number, userId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(foodLogs).where(and(eq(foodLogs.id, logId), eq(foodLogs.userId, userId)));
 }

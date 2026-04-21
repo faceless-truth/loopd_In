@@ -17,6 +17,9 @@ const MAPPING = {
   "newspaper.fill": "dynamic-feed",
   "person.2.fill": "people",
   "person.fill": "person",
+  "trophy.fill": "emoji-events",
+  "flag.fill": "flag",
+  "flag.2.crossed.fill": "sports-score",
   // Actions
   "plus": "add",
   "plus.circle.fill": "add-circle",

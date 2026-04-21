@@ -71,6 +71,13 @@ export const habits = mysqlTable("habits", {
   targetValue: int("targetValue").default(1).notNull(),
   isPrivate: boolean("isPrivate").default(false).notNull(),
   isArchived: boolean("isArchived").default(false).notNull(),
+  // Time-of-day scheduling
+  timeOfDay: mysqlEnum("timeOfDay", ["any_time", "morning", "afternoon", "nighttime", "custom"])
+    .default("any_time")
+    .notNull(),
+  customTime: varchar("customTime", { length: 5 }), // HH:MM format, e.g. "08:30"
+  // Sub-goal steps for numeric habits (e.g. 3 steps of 1L each for a 3L water goal)
+  subGoalSteps: int("subGoalSteps").default(1).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -136,3 +143,70 @@ export const comments = mysqlTable("comments", {
 
 export type Comment = typeof comments.$inferSelect;
 export type InsertComment = typeof comments.$inferInsert;
+
+/**
+ * Challenges: group accountability goals with leaderboard.
+ */
+export const challenges = mysqlTable("challenges", {
+  id: int("id").autoincrement().primaryKey(),
+  creatorId: int("creatorId").notNull(),
+  title: varchar("title", { length: 128 }).notNull(),
+  description: text("description"),
+  metric: varchar("metric", { length: 128 }).notNull(), // e.g. "10,000 steps per day"
+  targetValue: int("targetValue").default(1).notNull(),
+  targetType: mysqlEnum("targetType", ["boolean", "numeric"]).default("boolean").notNull(),
+  startDate: timestamp("startDate").notNull(),
+  endDate: timestamp("endDate").notNull(),
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Challenge = typeof challenges.$inferSelect;
+export type InsertChallenge = typeof challenges.$inferInsert;
+
+/**
+ * Challenge participants (members + their progress).
+ */
+export const challengeParticipants = mysqlTable("challenge_participants", {
+  id: int("id").autoincrement().primaryKey(),
+  challengeId: int("challengeId").notNull(),
+  userId: int("userId").notNull(),
+  habitId: int("habitId"), // auto-created habit linked to this challenge
+  completionCount: int("completionCount").default(0).notNull(),
+  status: mysqlEnum("status", ["invited", "joined", "declined"]).default("invited").notNull(),
+  joinedAt: timestamp("joinedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ChallengeParticipant = typeof challengeParticipants.$inferSelect;
+export type InsertChallengeParticipant = typeof challengeParticipants.$inferInsert;
+
+/**
+ * Food logs: meal photos + AI breakdown (opt-in feature).
+ */
+export const foodLogs = mysqlTable("food_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  mealType: mysqlEnum("mealType", ["breakfast", "lunch", "dinner", "snack"]).notNull(),
+  photoUrl: text("photoUrl"),
+  aiSummary: text("aiSummary"), // JSON string with macros/description from LLM
+  notes: text("notes"),
+  loggedAt: timestamp("loggedAt").defaultNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type FoodLog = typeof foodLogs.$inferSelect;
+export type InsertFoodLog = typeof foodLogs.$inferInsert;
+
+/**
+ * User settings (feature toggles like food photo opt-in).
+ */
+export const userSettings = mysqlTable("user_settings", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().unique(),
+  foodPhotoEnabled: boolean("foodPhotoEnabled").default(false).notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type UserSettings = typeof userSettings.$inferSelect;
+export type InsertUserSettings = typeof userSettings.$inferInsert;

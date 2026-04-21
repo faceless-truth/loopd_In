@@ -1,9 +1,10 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   FlatList,
   Pressable,
+  ScrollView,
   Text,
   View,
 } from "react-native";
@@ -13,6 +14,11 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { trpc } from "@/lib/trpc";
 import { CATEGORY_COLORS, CATEGORY_ICONS, HabitCategory } from "@/shared/types";
+
+const BRAND = "#7EB8F7";
+const BRAND_PURPLE = "#A78BFA";
+
+type ViewMode = "week" | "month";
 
 function formatDate(date: Date | string) {
   const d = typeof date === "string" ? new Date(date) : date;
@@ -24,14 +30,33 @@ function formatTime(date: Date | string) {
   return d.toLocaleTimeString("en-AU", { hour: "2-digit", minute: "2-digit" });
 }
 
+function isSameDay(a: Date, b: Date) {
+  return a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate();
+}
+
+/** Returns array of Date objects for the last N days (today last) */
+function getLastNDays(n: number): Date[] {
+  const days: Date[] = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    d.setHours(0, 0, 0, 0);
+    days.push(d);
+  }
+  return days;
+}
+
 export default function HabitDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const habitId = parseInt(id, 10);
   const colors = useColors();
   const router = useRouter();
+  const [viewMode, setViewMode] = useState<ViewMode>("week");
 
   const { data: habits, isLoading } = trpc.habits.list.useQuery();
-  const { data: logs, refetch: refetchLogs } = trpc.logs.getForHabit.useQuery({ habitId, limit: 30 });
+  const { data: logs, refetch: refetchLogs } = trpc.logs.getForHabit.useQuery({ habitId, limit: 60 });
   const { data: todayLogs, refetch: refetchToday } = trpc.logs.todayLogs.useQuery();
   const { data: streaks } = trpc.habits.streaks.useQuery();
 
@@ -82,16 +107,41 @@ export default function HabitDetailScreen() {
     );
   };
 
+  // --- Analytics ---
+  const analyticsData = useMemo(() => {
+    if (!logs || !habit) return null;
+
+    const days = viewMode === "week" ? getLastNDays(7) : getLastNDays(30);
+
+    // Map each day to its log(s)
+    const dayData = days.map((day) => {
+      const dayLogs = logs.filter((l) => isSameDay(new Date(l.completedAt), day));
+      const completed = dayLogs.length > 0;
+      const totalValue = dayLogs.reduce((sum, l) => sum + l.value, 0);
+      return { day, completed, totalValue, logs: dayLogs };
+    });
+
+    const completedDays = dayData.filter((d) => d.completed).length;
+    const completionRate = Math.round((completedDays / days.length) * 100);
+
+    // Average for numeric habits
+    const numericDays = dayData.filter((d) => d.completed && habit.targetType === "numeric");
+    const average = numericDays.length > 0
+      ? Math.round(numericDays.reduce((sum, d) => sum + d.totalValue, 0) / numericDays.length)
+      : null;
+
+    return { dayData, completedDays, completionRate, average, totalDays: days.length };
+  }, [logs, habit, viewMode]);
+
   if (isLoading || !habit) {
     return (
       <ScreenContainer className="items-center justify-center">
-        <ActivityIndicator color="#FF5C00" size="large" />
+        <ActivityIndicator color={BRAND} size="large" />
       </ScreenContainer>
     );
   }
 
   const streak = streaks?.[habitId] ?? 0;
-  const totalLogs = logs?.length ?? 0;
 
   return (
     <ScreenContainer>
@@ -106,11 +156,8 @@ export default function HabitDetailScreen() {
           borderBottomColor: colors.border,
         }}
       >
-        <Pressable
-          onPress={() => router.back()}
-          style={{ marginRight: 12 }}
-        >
-          <Text style={{ fontSize: 16, color: "#FF5C00" }}>← Back</Text>
+        <Pressable onPress={() => router.back()} style={{ marginRight: 12 }}>
+          <Text style={{ fontSize: 16, color: BRAND }}>← Back</Text>
         </Pressable>
         <Text
           style={{ flex: 1, fontSize: 17, fontWeight: "700", color: colors.foreground }}
@@ -119,7 +166,7 @@ export default function HabitDetailScreen() {
           {habit.title}
         </Text>
         <Pressable onPress={handleDelete}>
-          <Text style={{ fontSize: 14, color: colors.error ?? "#EF4444" }}>Delete</Text>
+          <Text style={{ fontSize: 14, color: colors.error ?? "#F87171" }}>Delete</Text>
         </Pressable>
       </View>
 
@@ -158,60 +205,39 @@ export default function HabitDetailScreen() {
                   </Text>
                   <Text style={{ fontSize: 13, color: categoryColor, fontWeight: "600", marginTop: 2 }}>
                     {category} · {habit.frequencyType}
+                    {habit.timeOfDay && habit.timeOfDay !== "any_time" && ` · ${habit.timeOfDay === "custom" && habit.customTime ? habit.customTime : habit.timeOfDay}`}
                   </Text>
                 </View>
               </View>
 
               {/* Stats row */}
               <View style={{ flexDirection: "row", gap: 12 }}>
-                <View
-                  style={{
-                    flex: 1,
-                    backgroundColor: colors.background,
-                    borderRadius: 12,
-                    padding: 12,
-                    alignItems: "center",
-                    gap: 4,
-                  }}
-                >
+                <View style={{ flex: 1, backgroundColor: colors.background, borderRadius: 12, padding: 12, alignItems: "center", gap: 4 }}>
                   <Text style={{ fontSize: 22 }}>🔥</Text>
-                  <Text style={{ fontSize: 24, fontWeight: "700", color: "#FF5C00" }}>
-                    {streak}
-                  </Text>
-                  <Text style={{ fontSize: 12, color: colors.muted }}>Day streak</Text>
+                  <Text style={{ fontSize: 24, fontWeight: "700", color: BRAND_PURPLE }}>{streak}</Text>
+                  <Text style={{ fontSize: 12, color: colors.muted }}>Streak</Text>
                 </View>
-                <View
-                  style={{
-                    flex: 1,
-                    backgroundColor: colors.background,
-                    borderRadius: 12,
-                    padding: 12,
-                    alignItems: "center",
-                    gap: 4,
-                  }}
-                >
-                  <Text style={{ fontSize: 24, fontWeight: "700", color: "#FF5C00" }}>
-                    {habit.targetValue}
+                <View style={{ flex: 1, backgroundColor: colors.background, borderRadius: 12, padding: 12, alignItems: "center", gap: 4 }}>
+                  <Text style={{ fontSize: 24, fontWeight: "700", color: BRAND }}>
+                    {analyticsData?.completionRate ?? 0}%
                   </Text>
                   <Text style={{ fontSize: 12, color: colors.muted }}>
-                    {habit.targetType === "boolean" ? "Daily goal" : "Target count"}
+                    {viewMode === "week" ? "7-day rate" : "30-day rate"}
                   </Text>
                 </View>
-                <View
-                  style={{
-                    flex: 1,
-                    backgroundColor: colors.background,
-                    borderRadius: 12,
-                    padding: 12,
-                    alignItems: "center",
-                    gap: 4,
-                  }}
-                >
-                  <Text style={{ fontSize: 20 }}>{habit.isPrivate ? "🔒" : "🌍"}</Text>
-                  <Text style={{ fontSize: 12, color: colors.muted }}>
-                    {habit.isPrivate ? "Private" : "Public"}
-                  </Text>
-                </View>
+                {habit.targetType === "numeric" && analyticsData?.average !== null ? (
+                  <View style={{ flex: 1, backgroundColor: colors.background, borderRadius: 12, padding: 12, alignItems: "center", gap: 4 }}>
+                    <Text style={{ fontSize: 24, fontWeight: "700", color: BRAND }}>
+                      {analyticsData?.average ?? 0}
+                    </Text>
+                    <Text style={{ fontSize: 12, color: colors.muted }}>Avg / day</Text>
+                  </View>
+                ) : (
+                  <View style={{ flex: 1, backgroundColor: colors.background, borderRadius: 12, padding: 12, alignItems: "center", gap: 4 }}>
+                    <Text style={{ fontSize: 20 }}>{habit.isPrivate ? "🔒" : "🌍"}</Text>
+                    <Text style={{ fontSize: 12, color: colors.muted }}>{habit.isPrivate ? "Private" : "Public"}</Text>
+                  </View>
+                )}
               </View>
 
               {/* Complete today button */}
@@ -222,8 +248,8 @@ export default function HabitDetailScreen() {
                   backgroundColor: isCompletedToday
                     ? categoryColor + "30"
                     : pressed
-                    ? "#E05200"
-                    : "#FF5C00",
+                    ? "#6AA8E8"
+                    : BRAND,
                   borderRadius: 14,
                   paddingVertical: 14,
                   alignItems: "center",
@@ -240,8 +266,134 @@ export default function HabitDetailScreen() {
               </Pressable>
             </View>
 
+            {/* Analytics Section */}
+            <View
+              style={{
+                backgroundColor: colors.surface,
+                borderRadius: 16,
+                padding: 16,
+                borderWidth: 1,
+                borderColor: colors.border,
+                gap: 14,
+              }}
+            >
+              {/* View mode toggle */}
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <Text style={{ fontSize: 16, fontWeight: "700", color: colors.foreground }}>
+                  Completion History
+                </Text>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    backgroundColor: colors.background,
+                    borderRadius: 10,
+                    padding: 3,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                  }}
+                >
+                  {(["week", "month"] as ViewMode[]).map((mode) => (
+                    <Pressable
+                      key={mode}
+                      onPress={() => setViewMode(mode)}
+                      style={{
+                        paddingHorizontal: 12,
+                        paddingVertical: 5,
+                        borderRadius: 8,
+                        backgroundColor: viewMode === mode ? BRAND : "transparent",
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 13,
+                          fontWeight: "600",
+                          color: viewMode === mode ? "#fff" : colors.muted,
+                        }}
+                      >
+                        {mode === "week" ? "7 Days" : "30 Days"}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+
+              {/* Calendar grid */}
+              {analyticsData && (
+                <>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    <View style={{ flexDirection: "row", gap: 4 }}>
+                      {analyticsData.dayData.map(({ day, completed, totalValue }, i) => {
+                        const isToday = isSameDay(day, new Date());
+                        return (
+                          <View key={i} style={{ alignItems: "center", gap: 4, width: viewMode === "week" ? 40 : 28 }}>
+                            {viewMode === "week" && (
+                              <Text style={{ fontSize: 10, color: colors.muted }}>
+                                {day.toLocaleDateString("en-AU", { weekday: "short" })}
+                              </Text>
+                            )}
+                            <View
+                              style={{
+                                width: viewMode === "week" ? 36 : 24,
+                                height: viewMode === "week" ? 36 : 24,
+                                borderRadius: 8,
+                                backgroundColor: completed
+                                  ? BRAND + (isToday ? "FF" : "99")
+                                  : colors.border,
+                                alignItems: "center",
+                                justifyContent: "center",
+                                borderWidth: isToday ? 2 : 0,
+                                borderColor: BRAND,
+                              }}
+                            >
+                              {completed && viewMode === "week" && (
+                                <Text style={{ fontSize: 14, color: "#fff" }}>✓</Text>
+                              )}
+                            </View>
+                            {viewMode === "week" && (
+                              <Text style={{ fontSize: 9, color: colors.muted }}>
+                                {day.getDate()}
+                              </Text>
+                            )}
+                            {viewMode === "month" && (
+                              <Text style={{ fontSize: 8, color: colors.muted }}>
+                                {day.getDate()}
+                              </Text>
+                            )}
+                          </View>
+                        );
+                      })}
+                    </View>
+                  </ScrollView>
+
+                  {/* Summary stats */}
+                  <View style={{ flexDirection: "row", gap: 12 }}>
+                    <View style={{ flex: 1, alignItems: "center", gap: 2 }}>
+                      <Text style={{ fontSize: 20, fontWeight: "700", color: BRAND }}>
+                        {analyticsData.completedDays}/{analyticsData.totalDays}
+                      </Text>
+                      <Text style={{ fontSize: 11, color: colors.muted }}>Days completed</Text>
+                    </View>
+                    <View style={{ flex: 1, alignItems: "center", gap: 2 }}>
+                      <Text style={{ fontSize: 20, fontWeight: "700", color: BRAND }}>
+                        {analyticsData.completionRate}%
+                      </Text>
+                      <Text style={{ fontSize: 11, color: colors.muted }}>Completion rate</Text>
+                    </View>
+                    {habit.targetType === "numeric" && analyticsData.average !== null && (
+                      <View style={{ flex: 1, alignItems: "center", gap: 2 }}>
+                        <Text style={{ fontSize: 20, fontWeight: "700", color: BRAND_PURPLE }}>
+                          {analyticsData.average}
+                        </Text>
+                        <Text style={{ fontSize: 11, color: colors.muted }}>Avg value</Text>
+                      </View>
+                    )}
+                  </View>
+                </>
+              )}
+            </View>
+
             <Text style={{ fontSize: 17, fontWeight: "700", color: colors.foreground }}>
-              History
+              Recent History
             </Text>
           </View>
         }
@@ -265,12 +417,12 @@ export default function HabitDetailScreen() {
                 width: 36,
                 height: 36,
                 borderRadius: 18,
-                backgroundColor: "#FF5C00" + "20",
+                backgroundColor: BRAND + "20",
                 alignItems: "center",
                 justifyContent: "center",
               }}
             >
-              <Text style={{ fontSize: 16 }}>✓</Text>
+              <Text style={{ fontSize: 16, color: BRAND }}>✓</Text>
             </View>
             <View style={{ flex: 1 }}>
               <Text style={{ fontSize: 14, fontWeight: "600", color: colors.foreground }}>

@@ -18,6 +18,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { trpc } from "@/lib/trpc";
 import { CATEGORY_COLORS, CATEGORY_ICONS, HabitCategory } from "@/shared/types";
 
+const BRAND = "#7EB8F7";
+
 export default function ProfileScreen() {
   const colors = useColors();
   const router = useRouter();
@@ -29,6 +31,11 @@ export default function ProfileScreen() {
   const { data: habits } = trpc.habits.list.useQuery();
   const { data: todayLogs } = trpc.logs.todayLogs.useQuery();
   const { data: streaks } = trpc.habits.streaks.useQuery();
+  const { data: settings } = trpc.settings.get.useQuery();
+  const updateSettingsMutation = trpc.settings.update.useMutation({
+    onSuccess: () => utils.settings.get.invalidate(),
+    onError: (err) => Alert.alert("Error", err.message),
+  });
 
   const utils = trpc.useUtils();
   const updateProfileMutation = trpc.profile.setup.useMutation({
@@ -280,6 +287,104 @@ export default function ProfileScreen() {
               </View>
             ))}
           </View>
+        </View>
+
+        {/* Settings */}
+        <View
+          style={{
+            marginHorizontal: 20,
+            marginBottom: 20,
+            backgroundColor: colors.surface,
+            borderRadius: 16,
+            borderWidth: 1,
+            borderColor: colors.border,
+            overflow: "hidden",
+          }}
+        >
+          <Text
+            style={{
+              fontSize: 13,
+              fontWeight: "700",
+              color: colors.muted,
+              paddingHorizontal: 16,
+              paddingTop: 14,
+              paddingBottom: 8,
+            }}
+          >
+            SETTINGS
+          </Text>
+
+          {/* Food Photo Toggle */}
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              paddingHorizontal: 16,
+              paddingVertical: 14,
+              borderTopWidth: 0.5,
+              borderTopColor: colors.border,
+              gap: 12,
+            }}
+          >
+            <Text style={{ fontSize: 20 }}>🍽️</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 15, fontWeight: "600", color: colors.foreground }}>Food Photo Log</Text>
+              <Text style={{ fontSize: 12, color: colors.muted, marginTop: 2 }}>
+                Track your meals with photos
+              </Text>
+            </View>
+            <Pressable
+              onPress={() =>
+                updateSettingsMutation.mutate({ foodPhotoEnabled: !settings?.foodPhotoEnabled })
+              }
+              style={{
+                width: 48,
+                height: 28,
+                borderRadius: 14,
+                backgroundColor: settings?.foodPhotoEnabled ? BRAND : colors.border,
+                justifyContent: "center",
+                paddingHorizontal: 2,
+              }}
+            >
+              <View
+                style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: 12,
+                  backgroundColor: "#fff",
+                  alignSelf: settings?.foodPhotoEnabled ? "flex-end" : "flex-start",
+                  shadowColor: "#000",
+                  shadowOpacity: 0.15,
+                  shadowRadius: 2,
+                  elevation: 2,
+                }}
+              />
+            </Pressable>
+          </View>
+
+          {/* Food Log link — only shown when enabled */}
+          {settings?.foodPhotoEnabled && (
+            <Pressable
+              onPress={() => router.push("/food-log" as any)}
+              style={({ pressed }) => ({
+                flexDirection: "row",
+                alignItems: "center",
+                paddingHorizontal: 16,
+                paddingVertical: 14,
+                borderTopWidth: 0.5,
+                borderTopColor: colors.border,
+                opacity: pressed ? 0.7 : 1,
+                gap: 12,
+              })}
+            >
+              <Text style={{ fontSize: 20 }}>📋</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 15, fontWeight: "600", color: colors.foreground }}>View Food Log</Text>
+                <Text style={{ fontSize: 12, color: colors.muted, marginTop: 2 }}>See today's meals</Text>
+              </View>
+              <Text style={{ fontSize: 18, color: colors.muted }}>›</Text>
+            </Pressable>
+          )}
         </View>
 
         {/* Habits breakdown */}

@@ -18,6 +18,25 @@ import { CATEGORY_COLORS, CATEGORY_ICONS, HabitCategory } from "@/shared/types";
 import type { Habit, HabitLog } from "@/drizzle/schema";
 import { PhotoProofSheet } from "@/components/photo-proof-sheet";
 
+const BRAND = "#7EB8F7";
+const BRAND_PURPLE = "#A78BFA";
+
+const TIME_ORDER: Record<string, number> = {
+  morning: 0,
+  afternoon: 1,
+  nighttime: 2,
+  custom: 3,
+  any_time: 4,
+};
+
+const TIME_LABELS: Record<string, string> = {
+  morning: "🌅 Morning",
+  afternoon: "☀️ Afternoon",
+  nighttime: "🌙 Night",
+  custom: "⏰",
+  any_time: "",
+};
+
 function getDayGreeting() {
   const hour = new Date().getHours();
   if (hour < 12) return "Good morning";
@@ -52,6 +71,16 @@ function HabitCard({
     habit.targetType === "numeric" && todayLog
       ? Math.min(todayLog.value / habit.targetValue, 1)
       : 0;
+
+  // Sub-goal steps: how many steps completed out of subGoalSteps
+  const subGoalSteps = habit.subGoalSteps ?? 1;
+  const stepsCompleted = habit.targetType === "numeric" && subGoalSteps > 1
+    ? Math.floor((todayLog?.value ?? 0) / (habit.targetValue / subGoalSteps))
+    : 0;
+
+  const timeLabel = habit.timeOfDay && habit.timeOfDay !== "any_time"
+    ? (habit.timeOfDay === "custom" && habit.customTime ? `⏰ ${habit.customTime}` : TIME_LABELS[habit.timeOfDay])
+    : null;
 
   return (
     <Pressable
@@ -109,10 +138,22 @@ function HabitCard({
             {habit.isPrivate && (
               <Text style={{ fontSize: 11, color: colors.muted }}>🔒 Private</Text>
             )}
+            {timeLabel && (
+              <View
+                style={{
+                  backgroundColor: BRAND + "20",
+                  borderRadius: 6,
+                  paddingHorizontal: 6,
+                  paddingVertical: 2,
+                }}
+              >
+                <Text style={{ fontSize: 11, fontWeight: "600", color: BRAND }}>{timeLabel}</Text>
+              </View>
+            )}
             {streak > 0 && (
               <View
                 style={{
-                  backgroundColor: "#FF5C0020",
+                  backgroundColor: BRAND_PURPLE + "20",
                   borderRadius: 6,
                   paddingHorizontal: 6,
                   paddingVertical: 2,
@@ -122,7 +163,7 @@ function HabitCard({
                 }}
               >
                 <Text style={{ fontSize: 11 }}>🔥</Text>
-                <Text style={{ fontSize: 11, fontWeight: "700", color: "#FF5C00" }}>{streak}</Text>
+                <Text style={{ fontSize: 11, fontWeight: "700", color: BRAND_PURPLE }}>{streak}</Text>
               </View>
             )}
           </View>
@@ -183,6 +224,22 @@ function HabitCard({
               }}
             />
           </View>
+          {/* Sub-goal step dots */}
+          {subGoalSteps > 1 && (
+            <View style={{ flexDirection: "row", gap: 4, marginTop: 8 }}>
+              {Array.from({ length: subGoalSteps }).map((_, i) => (
+                <View
+                  key={i}
+                  style={{
+                    flex: 1,
+                    height: 8,
+                    borderRadius: 4,
+                    backgroundColor: i < stepsCompleted ? categoryColor : colors.border,
+                  }}
+                />
+              ))}
+            </View>
+          )}
         </View>
       )}
     </Pressable>
@@ -249,13 +306,13 @@ export default function TodayScreen() {
   return (
     <ScreenContainer>
       <FlatList
-        data={habits ?? []}
+        data={[...(habits ?? [])].sort((a, b) => (TIME_ORDER[a.timeOfDay ?? "any_time"] ?? 4) - (TIME_ORDER[b.timeOfDay ?? "any_time"] ?? 4))}
         keyExtractor={(item) => item.id.toString()}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            tintColor="#FF5C00"
+            tintColor={BRAND}
           />
         }
         ListHeaderComponent={
@@ -276,19 +333,19 @@ export default function TodayScreen() {
             {totalCount > 0 && (
               <View
                 style={{
-                  backgroundColor: "#FF5C00" + "15",
+                  backgroundColor: BRAND + "15",
                   borderRadius: 16,
                   padding: 16,
                   marginBottom: 20,
                   borderWidth: 1,
-                  borderColor: "#FF5C00" + "30",
+                  borderColor: BRAND + "30",
                 }}
               >
                 <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                   <Text style={{ fontSize: 15, fontWeight: "600", color: colors.foreground }}>
                     Today's Progress
                   </Text>
-                  <Text style={{ fontSize: 15, fontWeight: "700", color: "#FF5C00" }}>
+                  <Text style={{ fontSize: 15, fontWeight: "700", color: BRAND }}>
                     {completedCount}/{totalCount}
                   </Text>
                 </View>
@@ -297,13 +354,13 @@ export default function TodayScreen() {
                     style={{
                       height: "100%",
                       width: totalCount > 0 ? `${(completedCount / totalCount) * 100}%` : "0%",
-                      backgroundColor: "#FF5C00",
+                      backgroundColor: BRAND,
                       borderRadius: 4,
                     }}
                   />
                 </View>
                 {completedCount === totalCount && totalCount > 0 && (
-                  <Text style={{ fontSize: 13, color: "#FF5C00", marginTop: 8, fontWeight: "600" }}>
+                  <Text style={{ fontSize: 13, color: BRAND, marginTop: 8, fontWeight: "600" }}>
                     🎉 All habits completed today!
                   </Text>
                 )}
@@ -317,7 +374,7 @@ export default function TodayScreen() {
               <Pressable
                 onPress={() => router.push("/habit/create" as any)}
                 style={({ pressed }) => ({
-                  backgroundColor: pressed ? "#E05200" : "#FF5C00",
+                  backgroundColor: pressed ? "#6AA8E8" : BRAND,
                   borderRadius: 20,
                   paddingHorizontal: 14,
                   paddingVertical: 7,
@@ -345,7 +402,7 @@ export default function TodayScreen() {
         ListEmptyComponent={
           habitsLoading ? (
             <View style={{ alignItems: "center", paddingTop: 40 }}>
-              <ActivityIndicator color="#FF5C00" />
+              <ActivityIndicator color={BRAND} />
             </View>
           ) : (
             <View style={{ alignItems: "center", paddingTop: 40, paddingHorizontal: 32, gap: 12 }}>
@@ -359,7 +416,7 @@ export default function TodayScreen() {
               <Pressable
                 onPress={() => router.push("/habit/create" as any)}
                 style={({ pressed }) => ({
-                  backgroundColor: pressed ? "#E05200" : "#FF5C00",
+                  backgroundColor: pressed ? "#6AA8E8" : BRAND,
                   borderRadius: 14,
                   paddingHorizontal: 24,
                   paddingVertical: 12,

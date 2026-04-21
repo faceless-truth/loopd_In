@@ -17,10 +17,22 @@ import { useColors } from "@/hooks/use-colors";
 import { trpc } from "@/lib/trpc";
 import { HABIT_CATEGORIES, CATEGORY_COLORS, CATEGORY_ICONS, HabitCategory } from "@/shared/types";
 
+const BRAND = "#7EB8F7";
+
 const FREQUENCY_OPTIONS = [
   { value: "daily", label: "Daily" },
   { value: "weekly", label: "Weekly" },
 ] as const;
+
+type TimeOfDay = "any_time" | "morning" | "afternoon" | "nighttime" | "custom";
+
+const TIME_OF_DAY_OPTIONS: { value: TimeOfDay; label: string; icon: string; hint: string }[] = [
+  { value: "any_time",  label: "Any Time",  icon: "🕐", hint: "" },
+  { value: "morning",   label: "Morning",   icon: "🌅", hint: "Before noon" },
+  { value: "afternoon", label: "Afternoon", icon: "☀️", hint: "12pm – 5pm" },
+  { value: "nighttime", label: "Night",     icon: "🌙", hint: "After 5pm" },
+  { value: "custom",    label: "Custom",    icon: "⏰", hint: "Set a time" },
+];
 
 export default function CreateHabitScreen() {
   const colors = useColors();
@@ -31,7 +43,10 @@ export default function CreateHabitScreen() {
   const [frequency, setFrequency] = useState<"daily" | "weekly">("daily");
   const [targetType, setTargetType] = useState<"boolean" | "numeric">("boolean");
   const [targetValue, setTargetValue] = useState("1");
+  const [subGoalSteps, setSubGoalSteps] = useState("1");
   const [isPrivate, setIsPrivate] = useState(false);
+  const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>("any_time");
+  const [customTime, setCustomTime] = useState("08:00");
 
   const utils = trpc.useUtils();
   const createMutation = trpc.habits.create.useMutation({
@@ -49,13 +64,18 @@ export default function CreateHabitScreen() {
       Alert.alert("Required", "Please enter a habit name.");
       return;
     }
+    const parsedTarget = parseInt(targetValue, 10) || 1;
+    const parsedSteps = parseInt(subGoalSteps, 10) || 1;
     createMutation.mutate({
       title: title.trim(),
       category,
       frequencyType: frequency,
       targetType,
-      targetValue: parseInt(targetValue, 10) || 1,
+      targetValue: parsedTarget,
+      subGoalSteps: parsedSteps,
       isPrivate,
+      timeOfDay,
+      customTime: timeOfDay === "custom" ? customTime : undefined,
     });
   };
 
@@ -83,16 +103,11 @@ export default function CreateHabitScreen() {
           <Text style={{ fontSize: 17, fontWeight: "700", color: colors.foreground }}>
             New Habit
           </Text>
-          <Pressable
-            onPress={handleCreate}
-            disabled={createMutation.isPending}
-          >
+          <Pressable onPress={handleCreate} disabled={createMutation.isPending}>
             {createMutation.isPending ? (
-              <ActivityIndicator color="#FF5C00" size="small" />
+              <ActivityIndicator color={BRAND} size="small" />
             ) : (
-              <Text style={{ fontSize: 16, fontWeight: "700", color: "#FF5C00" }}>
-                Create
-              </Text>
+              <Text style={{ fontSize: 16, fontWeight: "700", color: BRAND }}>Create</Text>
             )}
           </Pressable>
         </View>
@@ -109,7 +124,7 @@ export default function CreateHabitScreen() {
             <TextInput
               value={title}
               onChangeText={setTitle}
-              placeholder="e.g. Morning Run, Read 30 mins"
+              placeholder="e.g. Morning Run, Drink 3L Water"
               placeholderTextColor={colors.muted}
               style={{
                 backgroundColor: colors.surface,
@@ -128,9 +143,7 @@ export default function CreateHabitScreen() {
 
           {/* Category */}
           <View style={{ gap: 10 }}>
-            <Text style={{ fontSize: 13, fontWeight: "600", color: colors.muted }}>
-              CATEGORY
-            </Text>
+            <Text style={{ fontSize: 13, fontWeight: "600", color: colors.muted }}>CATEGORY</Text>
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
               {HABIT_CATEGORIES.map((cat) => {
                 const isSelected = category === cat;
@@ -167,11 +180,73 @@ export default function CreateHabitScreen() {
             </View>
           </View>
 
-          {/* Frequency */}
+          {/* Time of Day */}
           <View style={{ gap: 10 }}>
             <Text style={{ fontSize: 13, fontWeight: "600", color: colors.muted }}>
-              FREQUENCY
+              TIME OF DAY
             </Text>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+              {TIME_OF_DAY_OPTIONS.map((opt) => {
+                const isSelected = timeOfDay === opt.value;
+                return (
+                  <Pressable
+                    key={opt.value}
+                    onPress={() => setTimeOfDay(opt.value)}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 6,
+                      paddingHorizontal: 12,
+                      paddingVertical: 8,
+                      borderRadius: 20,
+                      backgroundColor: isSelected ? BRAND + "20" : colors.surface,
+                      borderWidth: 1.5,
+                      borderColor: isSelected ? BRAND : colors.border,
+                    }}
+                  >
+                    <Text style={{ fontSize: 14 }}>{opt.icon}</Text>
+                    <Text
+                      style={{
+                        fontSize: 13,
+                        fontWeight: "600",
+                        color: isSelected ? BRAND : colors.muted,
+                      }}
+                    >
+                      {opt.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            {timeOfDay === "custom" && (
+              <View style={{ gap: 6 }}>
+                <Text style={{ fontSize: 13, color: colors.muted }}>Set time (HH:MM)</Text>
+                <TextInput
+                  value={customTime}
+                  onChangeText={(t) => setCustomTime(t)}
+                  placeholder="08:00"
+                  placeholderTextColor={colors.muted}
+                  keyboardType="numbers-and-punctuation"
+                  style={{
+                    backgroundColor: colors.surface,
+                    borderRadius: 12,
+                    paddingHorizontal: 16,
+                    paddingVertical: 12,
+                    fontSize: 16,
+                    color: colors.foreground,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    width: 120,
+                  }}
+                  returnKeyType="done"
+                />
+              </View>
+            )}
+          </View>
+
+          {/* Frequency */}
+          <View style={{ gap: 10 }}>
+            <Text style={{ fontSize: 13, fontWeight: "600", color: colors.muted }}>FREQUENCY</Text>
             <View style={{ flexDirection: "row", gap: 8 }}>
               {FREQUENCY_OPTIONS.map((opt) => {
                 const isSelected = frequency === opt.value;
@@ -184,9 +259,9 @@ export default function CreateHabitScreen() {
                       paddingVertical: 12,
                       borderRadius: 12,
                       alignItems: "center",
-                      backgroundColor: isSelected ? "#FF5C00" : colors.surface,
+                      backgroundColor: isSelected ? BRAND : colors.surface,
                       borderWidth: 1,
-                      borderColor: isSelected ? "#FF5C00" : colors.border,
+                      borderColor: isSelected ? BRAND : colors.border,
                     }}
                   >
                     <Text
@@ -212,7 +287,7 @@ export default function CreateHabitScreen() {
             <View style={{ flexDirection: "row", gap: 8 }}>
               {[
                 { value: "boolean", label: "✓ Done / Not done" },
-                { value: "numeric", label: "# Count target" },
+                { value: "numeric", label: "# Count / Steps" },
               ].map((opt) => {
                 const isSelected = targetType === opt.value;
                 return (
@@ -225,9 +300,9 @@ export default function CreateHabitScreen() {
                       paddingHorizontal: 8,
                       borderRadius: 12,
                       alignItems: "center",
-                      backgroundColor: isSelected ? "#FF5C00" : colors.surface,
+                      backgroundColor: isSelected ? BRAND : colors.surface,
                       borderWidth: 1,
-                      borderColor: isSelected ? "#FF5C00" : colors.border,
+                      borderColor: isSelected ? BRAND : colors.border,
                     }}
                   >
                     <Text
@@ -246,27 +321,77 @@ export default function CreateHabitScreen() {
             </View>
 
             {targetType === "numeric" && (
-              <View style={{ gap: 6 }}>
-                <Text style={{ fontSize: 13, color: colors.muted }}>Daily target count</Text>
-                <TextInput
-                  value={targetValue}
-                  onChangeText={(t) => setTargetValue(t.replace(/[^0-9]/g, ""))}
-                  keyboardType="number-pad"
-                  placeholder="e.g. 10"
-                  placeholderTextColor={colors.muted}
+              <View style={{ gap: 16 }}>
+                {/* Daily target */}
+                <View style={{ gap: 6 }}>
+                  <Text style={{ fontSize: 13, color: colors.muted }}>
+                    Daily target (total goal)
+                  </Text>
+                  <TextInput
+                    value={targetValue}
+                    onChangeText={(t) => setTargetValue(t.replace(/[^0-9]/g, ""))}
+                    keyboardType="number-pad"
+                    placeholder="e.g. 3"
+                    placeholderTextColor={colors.muted}
+                    style={{
+                      backgroundColor: colors.surface,
+                      borderRadius: 12,
+                      paddingHorizontal: 16,
+                      paddingVertical: 12,
+                      fontSize: 16,
+                      color: colors.foreground,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      width: 120,
+                    }}
+                    returnKeyType="done"
+                  />
+                </View>
+
+                {/* Sub-goal steps */}
+                <View
                   style={{
                     backgroundColor: colors.surface,
                     borderRadius: 12,
-                    paddingHorizontal: 16,
-                    paddingVertical: 12,
-                    fontSize: 16,
-                    color: colors.foreground,
+                    padding: 14,
                     borderWidth: 1,
                     borderColor: colors.border,
-                    width: 120,
+                    gap: 8,
                   }}
-                  returnKeyType="done"
-                />
+                >
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <Text style={{ fontSize: 15, fontWeight: "600", color: colors.foreground }}>
+                        🪜 Sub-goal steps
+                      </Text>
+                      <Text style={{ fontSize: 12, color: colors.muted }}>
+                        Break goal into smaller ticks (e.g. 3 steps of 1L for a 3L water goal)
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={{ gap: 6 }}>
+                    <Text style={{ fontSize: 13, color: colors.muted }}>Number of steps</Text>
+                    <TextInput
+                      value={subGoalSteps}
+                      onChangeText={(t) => setSubGoalSteps(t.replace(/[^0-9]/g, ""))}
+                      keyboardType="number-pad"
+                      placeholder="e.g. 3"
+                      placeholderTextColor={colors.muted}
+                      style={{
+                        backgroundColor: colors.background,
+                        borderRadius: 10,
+                        paddingHorizontal: 16,
+                        paddingVertical: 10,
+                        fontSize: 16,
+                        color: colors.foreground,
+                        borderWidth: 1,
+                        borderColor: colors.border,
+                        width: 100,
+                      }}
+                      returnKeyType="done"
+                    />
+                  </View>
+                </View>
               </View>
             )}
           </View>
@@ -296,7 +421,7 @@ export default function CreateHabitScreen() {
             <Switch
               value={isPrivate}
               onValueChange={setIsPrivate}
-              trackColor={{ false: colors.border, true: "#FF5C00" }}
+              trackColor={{ false: colors.border, true: BRAND }}
               thumbColor="#fff"
             />
           </View>
