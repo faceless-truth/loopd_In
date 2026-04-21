@@ -30,9 +30,9 @@ export default function LoginScreen() {
             style={{ width: 96, height: 96, borderRadius: 22 }}
           />
           <View className="items-center gap-1">
-            <Text className="text-4xl font-bold text-foreground">Accountable</Text>
+            <Text className="text-4xl font-bold text-foreground">Loopd In</Text>
             <Text className="text-base text-muted text-center">
-              Build habits. Stay accountable.{"\n"}Celebrate with friends.
+              Build habits. Stay looped in.{"\n"}Celebrate with friends.
             </Text>
           </View>
         </View>
