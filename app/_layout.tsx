@@ -2,13 +2,15 @@ import "@/global.css";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 import { Platform } from "react-native";
 import "@/lib/_core/nativewind-pressable";
 import { ThemeProvider } from "@/lib/theme-provider";
 import { useAuth } from "@/hooks/use-auth";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { ONBOARDING_SEEN_KEY } from "./onboarding";
 import { trpc as trpcHook } from "@/lib/trpc";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
 import {
@@ -34,6 +36,7 @@ function AuthRedirect() {
   const segments = useSegments();
   const router = useRouter();
   const profileQuery = trpcHook.profile.get.useQuery(undefined, { enabled: !!user });
+  const onboardingChecked = useRef(false);
 
   // Register push token and handle notification deep links when user is authenticated
   usePushNotifications();
@@ -43,12 +46,28 @@ function AuthRedirect() {
     const inAuthGroup = segments[0] === "(auth)";
     const inOAuthGroup = segments[0] === "oauth";
     const inProfileSetup = segments[0] === "profile" && segments[1] === "setup";
+    const inOnboarding = segments[0] === "onboarding";
 
     if (!user && !inAuthGroup && !inOAuthGroup) {
       router.replace("/(auth)/login" as any);
     } else if (user && inAuthGroup) {
-      router.replace("/(tabs)" as any);
-    } else if (user && !profileQuery.isLoading && !profileQuery.data && !inProfileSetup && !inAuthGroup && !inOAuthGroup) {
+      // After login: check if onboarding has been seen
+      AsyncStorage.getItem(ONBOARDING_SEEN_KEY).then((seen) => {
+        if (!seen) {
+          router.replace("/onboarding" as any);
+        } else {
+          router.replace("/(tabs)" as any);
+        }
+      });
+    } else if (
+      user &&
+      !profileQuery.isLoading &&
+      !profileQuery.data &&
+      !inProfileSetup &&
+      !inAuthGroup &&
+      !inOAuthGroup &&
+      !inOnboarding
+    ) {
       router.replace("/profile/setup" as any);
     }
   }, [user, loading, segments, profileQuery.data, profileQuery.isLoading]);
@@ -125,6 +144,7 @@ export default function RootLayout() {
             <Stack.Screen name="feed/[logId]" />
             <Stack.Screen name="profile/setup" />
             <Stack.Screen name="profile/[userId]" />
+            <Stack.Screen name="onboarding" />
           </Stack>
           <StatusBar style="auto" />
         </QueryClientProvider>

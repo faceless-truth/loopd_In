@@ -133,6 +133,12 @@ export async function getUserHabits(userId: number): Promise<Habit[]> {
   if (!db) return [];
   return db.select().from(habits).where(and(eq(habits.userId, userId), eq(habits.isArchived, false)));
 }
+export async function getHabitById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(habits).where(eq(habits.id, id));
+  return rows[0] ?? null;
+}
 
 export async function createHabit(data: InsertHabit): Promise<number> {
   const db = await getDb();
@@ -486,6 +492,67 @@ export async function getChallengeById(id: number) {
   if (!db) return null;
   const rows = await db.select().from(challenges).where(eq(challenges.id, id));
   return rows[0] ?? null;
+}
+
+/**
+ * Auto-sync: when a user completes a habit, check if any of their active joined
+ * challenges have a metric that loosely matches the habit title or category.
+ * If so, increment their completion count for that challenge.
+ * Returns the number of challenges incremented.
+ */
+export async function autoSyncChallengesOnHabitComplete(
+  userId: number,
+  habitTitle: string,
+  habitCategory: string | null
+): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+
+  const now = new Date();
+
+  // Get all active challenges the user has joined
+  const rows = await db
+    .select({ challenge: challenges, participant: challengeParticipants })
+    .from(challengeParticipants)
+    .innerJoin(challenges, eq(challengeParticipants.challengeId, challenges.id))
+    .where(
+      and(
+        eq(challengeParticipants.userId, userId),
+        eq(challengeParticipants.status, "joined"),
+        eq(challenges.isActive, true)
+      )
+    );
+
+  // Filter to active (not expired) challenges
+  const active = rows.filter((r) => new Date(r.challenge.endDate) >= now);
+  if (active.length === 0) return 0;
+
+  // Fuzzy keyword match: check if habit title or category words appear in challenge metric
+  const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, " ");
+  const habitWords = [
+    ...normalize(habitTitle).split(" "),
+    ...(habitCategory ? normalize(habitCategory).split(" ") : []),
+  ].filter((w) => w.length > 2);
+
+  let synced = 0;
+  for (const row of active) {
+    const metricWords = normalize(row.challenge.metric).split(" ").filter((w) => w.length > 2);
+    const hasMatch = habitWords.some((hw) => metricWords.some((mw) => mw.includes(hw) || hw.includes(mw)));
+    if (hasMatch) {
+      const current = row.participant.completionCount ?? 0;
+      await db
+        .update(challengeParticipants)
+        .set({ completionCount: current + 1 })
+        .where(
+          and(
+            eq(challengeParticipants.challengeId, row.challenge.id),
+            eq(challengeParticipants.userId, userId)
+          )
+        );
+      synced++;
+    }
+  }
+  return synced;
 }
 
 // ─── User Settings ────────────────────────────────────────────────────────────

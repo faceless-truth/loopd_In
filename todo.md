@@ -144,3 +144,19 @@
 - [x] Take/upload photo for each meal
 - [ ] AI-powered food breakdown (send photo to LLM, display macros/summary) (backlog)
 - [x] Food log accessible from profile or separate tab
+
+## Round 4 — Auto-sync & Onboarding
+
+### Challenge Auto-Sync
+- [x] Add DB helper: getActiveJoinedChallengesForUser(userId) — returns challenges the user has joined
+- [x] On habit completion (logs.complete), fetch user's active challenges
+- [x] Match completed habit's title/category/metric to challenge metric (fuzzy or keyword match)
+- [x] Auto-increment challenge completion count when a match is found
+- [x] Invalidate challenges.list on client after habit completion
+
+### Onboarding Walkthrough
+- [x] Create onboarding screen with 3-step carousel (Create Habit, Invite Friends, Start Challenge)
+- [x] Store "onboarding seen" flag in AsyncStorage
+- [x] Show walkthrough only on first login (before dashboard)
+- [x] Skip button and "Get Started" CTA on final step
+- [x] Wire into auth redirect flow

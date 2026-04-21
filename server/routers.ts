@@ -106,6 +106,15 @@ export const appRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         const logId = await db.logHabitCompletion({ ...input, userId: ctx.user.id });
+        // Auto-sync: increment challenge completion count if habit matches a challenge metric
+        const habit = await db.getHabitById(input.habitId);
+        if (habit) {
+          await db.autoSyncChallengesOnHabitComplete(
+            ctx.user.id,
+            habit.title,
+            habit.category ?? null
+          ).catch(() => { /* non-fatal */ });
+        }
         return { logId };
       }),
 
