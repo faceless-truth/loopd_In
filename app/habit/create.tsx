@@ -16,13 +16,31 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { trpc } from "@/lib/trpc";
 import { HABIT_CATEGORIES, CATEGORY_COLORS, CATEGORY_ICONS, HabitCategory } from "@/shared/types";
+import {
+  DayIndex,
+  formatCustomDaysCsv,
+} from "@/shared/day-of-week";
 
 const BRAND = "#7EB8F7";
 
 const FREQUENCY_OPTIONS = [
   { value: "daily", label: "Daily" },
   { value: "weekly", label: "Weekly" },
+  { value: "custom_days", label: "Specific days" },
 ] as const;
+
+type FrequencyValue = typeof FREQUENCY_OPTIONS[number]["value"];
+
+// Mon=0..Sun=6 display labels, matching shared/day-of-week.ts.
+const DAY_PICKER_LABELS: readonly { idx: DayIndex; short: string }[] = [
+  { idx: 0, short: "M" },
+  { idx: 1, short: "T" },
+  { idx: 2, short: "W" },
+  { idx: 3, short: "T" },
+  { idx: 4, short: "F" },
+  { idx: 5, short: "S" },
+  { idx: 6, short: "S" },
+];
 
 type TimeOfDay = "any_time" | "morning" | "afternoon" | "nighttime" | "custom";
 
@@ -40,7 +58,8 @@ export default function CreateHabitScreen() {
 
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<HabitCategory>("Fitness");
-  const [frequency, setFrequency] = useState<"daily" | "weekly">("daily");
+  const [frequency, setFrequency] = useState<FrequencyValue>("daily");
+  const [customDays, setCustomDays] = useState<Set<DayIndex>>(new Set());
   const [targetType, setTargetType] = useState<"boolean" | "numeric">("boolean");
   const [targetValue, setTargetValue] = useState("1");
   const [subGoalSteps, setSubGoalSteps] = useState("1");
@@ -59,9 +78,22 @@ export default function CreateHabitScreen() {
     },
   });
 
+  const toggleCustomDay = (idx: DayIndex) => {
+    setCustomDays((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx);
+      else next.add(idx);
+      return next;
+    });
+  };
+
   const handleCreate = () => {
     if (!title.trim()) {
       Alert.alert("Required", "Please enter a habit name.");
+      return;
+    }
+    if (frequency === "custom_days" && customDays.size === 0) {
+      Alert.alert("Required", "Pick at least one day of the week.");
       return;
     }
     const parsedTarget = parseInt(targetValue, 10) || 1;
@@ -70,6 +102,8 @@ export default function CreateHabitScreen() {
       title: title.trim(),
       category,
       frequencyType: frequency,
+      customDays:
+        frequency === "custom_days" ? formatCustomDaysCsv(customDays) : undefined,
       targetType,
       targetValue: parsedTarget,
       subGoalSteps: parsedSteps,
@@ -277,6 +311,44 @@ export default function CreateHabitScreen() {
                 );
               })}
             </View>
+
+            {frequency === "custom_days" && (
+              <View style={{ gap: 6, marginTop: 4 }}>
+                <Text style={{ fontSize: 13, color: colors.muted }}>
+                  Pick the days this habit runs
+                </Text>
+                <View style={{ flexDirection: "row", gap: 6 }}>
+                  {DAY_PICKER_LABELS.map((d) => {
+                    const isSelected = customDays.has(d.idx);
+                    return (
+                      <Pressable
+                        key={d.idx}
+                        onPress={() => toggleCustomDay(d.idx)}
+                        style={{
+                          flex: 1,
+                          paddingVertical: 10,
+                          borderRadius: 10,
+                          alignItems: "center",
+                          backgroundColor: isSelected ? BRAND : colors.surface,
+                          borderWidth: 1,
+                          borderColor: isSelected ? BRAND : colors.border,
+                        }}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 14,
+                            fontWeight: "700",
+                            color: isSelected ? "#fff" : colors.muted,
+                          }}
+                        >
+                          {d.short}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
           </View>
 
           {/* Target Type */}
