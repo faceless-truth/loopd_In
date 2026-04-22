@@ -160,3 +160,14 @@
 - [x] Show walkthrough only on first login (before dashboard)
 - [x] Skip button and "Get Started" CTA on final step
 - [x] Wire into auth redirect flow
+
+## Phase 1 — Critical Fixes & Verification
+
+- [ ] Pull fix/phase-1-criticals branch from GitHub
+- [ ] Fix: numeric sub-goal multi-tap (double-completion bug)
+- [ ] Fix: challenge invite modal (broken/missing)
+- [ ] Fix: feed photos on iOS/Android (not just web)
+- [ ] Fix: custom-days habit creation
+- [ ] Fix NF-3: stub or delete app/profile/[userId].tsx (orphan Stack.Screen)
+- [ ] Open PR fix/phase-1-criticals → main and merge
+- [ ] Run dedupe queries and report results
