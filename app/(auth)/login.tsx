@@ -57,7 +57,7 @@ export default function LoginScreen() {
             onPress={handleLogin}
             disabled={loading}
             style={({ pressed }) => ({
-              backgroundColor: pressed ? "#E05200" : "#FF5C00",
+              backgroundColor: pressed ? "#6366C4" : "#7B7FD4",
               borderRadius: 14,
               paddingVertical: 16,
               alignItems: "center",
