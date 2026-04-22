@@ -29,6 +29,7 @@ import {
   users,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
+import { computeStreak } from "./streak";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -284,47 +285,36 @@ export async function getReactionsForLogs(logIds: number[]): Promise<Reaction[]>
 // ─── Streaks ─────────────────────────────────────────────────────────────────
 
 /**
- * Calculate the current streak for a habit: consecutive days ending today (or yesterday)
- * where at least one log exists.
+ * Calculate the current streak for a habit, respecting its frequencyType
+ * and customDays (see server/streak.ts for the semantics).
  */
 export async function getHabitStreak(habitId: number): Promise<number> {
   const db = await getDb();
   if (!db) return 0;
+
+  const habitRows = await db
+    .select({
+      frequencyType: habits.frequencyType,
+      customDays: habits.customDays,
+    })
+    .from(habits)
+    .where(eq(habits.id, habitId))
+    .limit(1);
+  const rule = habitRows[0];
+  if (!rule) return 0;
 
   const logs = await db
     .select({ completedAt: habitLogs.completedAt })
     .from(habitLogs)
     .where(eq(habitLogs.habitId, habitId))
     .orderBy(desc(habitLogs.completedAt));
-
   if (logs.length === 0) return 0;
 
-  // Build a set of unique date strings (YYYY-MM-DD)
-  const logDates = new Set(
-    logs.map((l) => {
-      const d = new Date(l.completedAt);
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    })
+  return computeStreak(
+    logs.map((l) => new Date(l.completedAt)),
+    { frequencyType: rule.frequencyType, customDays: rule.customDays },
+    new Date(),
   );
-
-  const today = new Date();
-  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-
-  // Start from today; if today has no log, start from yesterday
-  let streak = 0;
-  const cursor = new Date(today);
-  if (!logDates.has(todayStr)) {
-    cursor.setDate(cursor.getDate() - 1);
-  }
-
-  while (true) {
-    const dateStr = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(cursor.getDate()).padStart(2, "0")}`;
-    if (!logDates.has(dateStr)) break;
-    streak++;
-    cursor.setDate(cursor.getDate() - 1);
-  }
-
-  return streak;
 }
 
 /**
@@ -336,16 +326,32 @@ export async function getUserHabitStreaks(userId: number): Promise<Record<number
   if (!db) return {};
 
   const userHabits = await db
-    .select({ id: habits.id })
+    .select({
+      id: habits.id,
+      frequencyType: habits.frequencyType,
+      customDays: habits.customDays,
+    })
     .from(habits)
     .where(and(eq(habits.userId, userId), eq(habits.isArchived, false)));
 
   if (userHabits.length === 0) return {};
 
+  const now = new Date();
   const streaks: Record<number, number> = {};
   await Promise.all(
     userHabits.map(async (h) => {
-      streaks[h.id] = await getHabitStreak(h.id);
+      const logs = await db
+        .select({ completedAt: habitLogs.completedAt })
+        .from(habitLogs)
+        .where(eq(habitLogs.habitId, h.id))
+        .orderBy(desc(habitLogs.completedAt));
+      streaks[h.id] = logs.length === 0
+        ? 0
+        : computeStreak(
+            logs.map((l) => new Date(l.completedAt)),
+            { frequencyType: h.frequencyType, customDays: h.customDays },
+            now,
+          );
     })
   );
   return streaks;
