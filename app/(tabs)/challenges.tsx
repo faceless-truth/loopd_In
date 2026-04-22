@@ -499,14 +499,13 @@ function CreateChallengeModal({
               <Text style={{ fontSize: 13, fontWeight: "600", color: colors.muted }}>
                 INVITE FRIENDS ({selectedFriendIds.length} selected)
               </Text>
-              {friends.map((f: any) => {
-                const profile = f.profile;
-                if (!profile) return null;
-                const isSelected = selectedFriendIds.includes(f.friendId);
+              {friends.map((f) => {
+                if (!f) return null;
+                const isSelected = selectedFriendIds.includes(f.userId);
                 return (
                   <Pressable
-                    key={f.friendId}
-                    onPress={() => toggleFriend(f.friendId)}
+                    key={f.userId}
+                    onPress={() => toggleFriend(f.userId)}
                     style={{
                       flexDirection: "row",
                       alignItems: "center",
@@ -518,12 +517,12 @@ function CreateChallengeModal({
                       borderColor: isSelected ? BRAND : colors.border,
                     }}
                   >
-                    <AvatarCircle name={profile.displayName} size={36} />
+                    <AvatarCircle name={f.displayName} size={36} />
                     <View style={{ flex: 1 }}>
                       <Text style={{ fontSize: 15, fontWeight: "600", color: colors.foreground }}>
-                        {profile.displayName}
+                        {f.displayName}
                       </Text>
-                      <Text style={{ fontSize: 12, color: colors.muted }}>@{profile.username}</Text>
+                      <Text style={{ fontSize: 12, color: colors.muted }}>@{f.username}</Text>
                     </View>
                     <View
                       style={{
