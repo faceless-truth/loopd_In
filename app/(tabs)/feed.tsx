@@ -15,6 +15,7 @@ import { useColors } from "@/hooks/use-colors";
 import { useAuth } from "@/hooks/use-auth";
 import { trpc } from "@/lib/trpc";
 import { CATEGORY_COLORS, CATEGORY_ICONS, FEED_EMOJIS, HabitCategory } from "@/shared/types";
+import { resolveStorageUrl } from "@/lib/storage-url";
 
 function timeAgo(date: Date | string) {
   const d = typeof date === "string" ? new Date(date) : date;
@@ -140,7 +141,7 @@ function FeedCard({
         >
           {profile?.avatarUrl ? (
             <Image
-              source={{ uri: profile.avatarUrl }}
+              source={{ uri: resolveStorageUrl(profile.avatarUrl) }}
               style={{ width: 40, height: 40 }}
             />
           ) : (
@@ -214,7 +215,7 @@ function FeedCard({
       {/* Photo */}
       {item.log.photoUrl && (
         <Image
-          source={{ uri: item.log.photoUrl }}
+          source={{ uri: resolveStorageUrl(item.log.photoUrl) }}
           style={{
             width: "100%",
             height: 200,

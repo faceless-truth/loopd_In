@@ -18,6 +18,7 @@ import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { trpc } from "@/lib/trpc";
+import { resolveStorageUrl } from "@/lib/storage-url";
 
 const BRAND = "#7EB8F7";
 const BRAND_PURPLE = "#A78BFA";
@@ -392,7 +393,7 @@ export default function FoodLogScreen() {
                   >
                     {entry.photoUrl && (
                       <Image
-                        source={{ uri: entry.photoUrl }}
+                        source={{ uri: resolveStorageUrl(entry.photoUrl) }}
                         style={{ width: "100%", height: 160 }}
                         resizeMode="cover"
                       />

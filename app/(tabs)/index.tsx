@@ -16,6 +16,11 @@ import { useAuth } from "@/hooks/use-auth";
 import { trpc } from "@/lib/trpc";
 import { CATEGORY_COLORS, CATEGORY_ICONS, HabitCategory } from "@/shared/types";
 import type { Habit, HabitLog } from "@/drizzle/schema";
+import {
+  isHabitCompletedToday,
+  stepValueForHabit,
+  sumTodayValue,
+} from "@/shared/habit-progress";
 import { PhotoProofSheet } from "@/components/photo-proof-sheet";
 
 const BRAND = "#7EB8F7";
@@ -50,32 +55,33 @@ function formatDate(date: Date) {
 
 function HabitCard({
   habit,
-  todayLog,
+  todayLogs,
   streak,
   onComplete,
   onPress,
 }: {
   habit: Habit;
-  todayLog: HabitLog | undefined;
+  todayLogs: HabitLog[] | undefined;
   streak: number;
   onComplete: (habit: Habit) => void;
   onPress: (habit: Habit) => void;
 }) {
   const colors = useColors();
-  const isCompleted = !!todayLog;
+  const todayValue = sumTodayValue(todayLogs, habit.id);
+  const isCompleted = isHabitCompletedToday(habit, todayLogs, habit.id);
   const category = (habit.category as HabitCategory) ?? "Other";
   const categoryColor = CATEGORY_COLORS[category] ?? "#6B7280";
   const categoryIcon = CATEGORY_ICONS[category] ?? "✨";
 
   const numericProgress =
-    habit.targetType === "numeric" && todayLog
-      ? Math.min(todayLog.value / habit.targetValue, 1)
+    habit.targetType === "numeric"
+      ? Math.min(todayValue / habit.targetValue, 1)
       : 0;
 
   // Sub-goal steps: how many steps completed out of subGoalSteps
   const subGoalSteps = habit.subGoalSteps ?? 1;
   const stepsCompleted = habit.targetType === "numeric" && subGoalSteps > 1
-    ? Math.floor((todayLog?.value ?? 0) / (habit.targetValue / subGoalSteps))
+    ? Math.floor(todayValue / (habit.targetValue / subGoalSteps))
     : 0;
 
   const timeLabel = habit.timeOfDay && habit.timeOfDay !== "any_time"
@@ -201,7 +207,7 @@ function HabitCard({
             }}
           >
             <Text style={{ fontSize: 12, color: colors.muted }}>
-              {todayLog?.value ?? 0} / {habit.targetValue}
+              {todayValue} / {habit.targetValue}
             </Text>
             <Text style={{ fontSize: 12, color: colors.muted }}>
               {Math.round(numericProgress * 100)}%
@@ -261,9 +267,21 @@ export default function TodayScreen() {
   const completeMutation = trpc.logs.complete.useMutation({
     onSuccess: (data, variables) => {
       refetchLogs();
-      // Show photo proof sheet after completion
+      // Fire the photo-proof sheet only on the tap that satisfies the habit,
+      // so a 3-step numeric habit prompts once (on tap 3) rather than three times.
       const habit = habits?.find((h) => h.id === variables.habitId);
-      if (data?.logId && habit) {
+      if (!habit || !data?.logId) return;
+      const prevSum = sumTodayValue(todayLogs, variables.habitId);
+      const newSum = prevSum + (variables.value ?? 1);
+      const wasCompleted =
+        habit.targetType === "boolean"
+          ? prevSum >= 1
+          : prevSum >= habit.targetValue;
+      const isNowCompleted =
+        habit.targetType === "boolean"
+          ? newSum >= 1
+          : newSum >= habit.targetValue;
+      if (!wasCompleted && isNowCompleted) {
         setPhotoProof({ logId: data.logId, habitTitle: habit.title });
       }
     },
@@ -274,11 +292,12 @@ export default function TodayScreen() {
 
   const handleComplete = useCallback(
     async (habit: Habit) => {
-      const alreadyDone = todayLogs?.some((l) => l.habitId === habit.id);
-      if (alreadyDone) return;
+      // Numeric habits with sub-goals accumulate multiple logs per day until the
+      // total reaches targetValue. Only block further taps once the habit is satisfied.
+      if (isHabitCompletedToday(habit, todayLogs, habit.id)) return;
 
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      completeMutation.mutate({ habitId: habit.id, value: 1 });
+      completeMutation.mutate({ habitId: habit.id, value: stepValueForHabit(habit) });
     },
     [todayLogs, completeMutation, habits]
   );
@@ -290,7 +309,7 @@ export default function TodayScreen() {
   }, [refetchHabits, refetchLogs]);
 
   const completedCount = habits?.filter((h) =>
-    todayLogs?.some((l) => l.habitId === h.id)
+    isHabitCompletedToday(h, todayLogs, h.id)
   ).length ?? 0;
   const totalCount = habits?.length ?? 0;
 
@@ -392,7 +411,7 @@ export default function TodayScreen() {
           <View style={{ paddingHorizontal: 20 }}>
             <HabitCard
               habit={item}
-              todayLog={todayLogs?.find((l) => l.habitId === item.id)}
+              todayLogs={todayLogs?.filter((l) => l.habitId === item.id)}
               streak={streaks?.[item.id] ?? 0}
               onComplete={handleComplete}
               onPress={(h) => router.push(`/habit/${h.id}` as any)}
