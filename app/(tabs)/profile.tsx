@@ -17,6 +17,7 @@ import { useColors } from "@/hooks/use-colors";
 import { useAuth } from "@/hooks/use-auth";
 import { trpc } from "@/lib/trpc";
 import { CATEGORY_COLORS, CATEGORY_ICONS, HabitCategory } from "@/shared/types";
+import { resolveStorageUrl } from "@/lib/storage-url";
 
 const BRAND = "#7EB8F7";
 
@@ -200,7 +201,7 @@ export default function ProfileScreen() {
                 <ActivityIndicator color="#FF5C00" />
               ) : profile.avatarUrl ? (
                 <Image
-                  source={{ uri: profile.avatarUrl }}
+                  source={{ uri: resolveStorageUrl(profile.avatarUrl) }}
                   style={{ width: 88, height: 88 }}
                 />
               ) : (
