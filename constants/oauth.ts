@@ -7,17 +7,38 @@ const bundleId = "space.manus.accountable.t20260420030550";
 const timestamp = bundleId.split(".").pop()?.replace(/^t/, "") ?? "";
 const schemeFromBundleId = `manus${timestamp}`;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// CRITICAL: These values are hardcoded because the .env file is empty and env
+// vars are only available in the dev sandbox process (via load-env.js). In a
+// production APK build the build machine has no sandbox env vars, so all
+// EXPO_PUBLIC_* values would be empty strings — breaking the OAuth flow.
+// Hardcoding ensures the OAuth flow always works in every build context.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Manus OAuth portal — always https://manus.im */
+const HARDCODED_PORTAL_URL = "https://manus.im";
+
+/** This app's Manus project / app ID */
+const HARDCODED_APP_ID = "eEwWyPnnVHoRpc94TJ2rQE";
+
+/**
+ * The deployed production domain for this project.
+ * This is the ONLY domain registered with the Manus OAuth portal as a valid
+ * redirectUri. The sandbox URL (3000-xxx.sg1.manus.computer) is NOT registered
+ * and the portal rejects it with "Permission denied — Redirect URI is not set".
+ */
+const HARDCODED_DEPLOYED_URL = "https://habittrack-eewwypnn.manus.space";
+
 const env = {
-  portal: process.env.EXPO_PUBLIC_OAUTH_PORTAL_URL ?? "",
+  // Env vars take priority if set; hardcoded values are the fallback
+  portal: process.env.EXPO_PUBLIC_OAUTH_PORTAL_URL || HARDCODED_PORTAL_URL,
   server: process.env.EXPO_PUBLIC_OAUTH_SERVER_URL ?? "",
-  appId: process.env.EXPO_PUBLIC_APP_ID ?? "",
+  appId: process.env.EXPO_PUBLIC_APP_ID || HARDCODED_APP_ID,
   ownerId: process.env.EXPO_PUBLIC_OWNER_OPEN_ID ?? "",
   ownerName: process.env.EXPO_PUBLIC_OWNER_NAME ?? "",
   apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL ?? "",
-  // The deployed production domain — registered with the Manus OAuth portal.
-  // The portal validates redirectUri against this domain, so native OAuth MUST
-  // use this URL (not the sandbox URL which is not registered).
-  deployedApiUrl: process.env.EXPO_PUBLIC_DEPLOYED_API_URL ?? "",
+  // Always falls back to the hardcoded deployed domain — this is the registered domain
+  deployedApiUrl: process.env.EXPO_PUBLIC_DEPLOYED_API_URL || HARDCODED_DEPLOYED_URL,
   deepLinkScheme: schemeFromBundleId,
 };
 
@@ -97,9 +118,8 @@ export const getRedirectUri = () => {
     return `${getApiBaseUrl()}/api/oauth/callback`;
   } else {
     // Use the deployed domain as the base for the redirect URI.
-    const base = DEPLOYED_API_URL
-      ? DEPLOYED_API_URL.replace(/\/$/, "")
-      : getApiBaseUrl();
+    // DEPLOYED_API_URL is always set (hardcoded fallback guarantees this).
+    const base = DEPLOYED_API_URL.replace(/\/$/, "");
 
     // Embed the app deep link as a query param in the redirectUri so the portal
     // forwards it back to our server (portal only forwards code + state, not custom params).
