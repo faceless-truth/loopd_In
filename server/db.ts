@@ -246,6 +246,21 @@ export async function getFriendshipById(id: number): Promise<Friendship | undefi
   return rows[0];
 }
 
+export async function declineFriendRequest(id: number, friendId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  // Only the recipient (friendId) can decline, and only a still-pending row.
+  // An accepted friendship must be unfriended via a future explicit endpoint,
+  // not via decline.
+  await db.delete(friendships).where(
+    and(
+      eq(friendships.id, id),
+      eq(friendships.friendId, friendId),
+      eq(friendships.status, "pending"),
+    ),
+  );
+}
+
 export async function getFriends(userId: number): Promise<Friendship[]> {
   const db = await getDb();
   if (!db) return [];

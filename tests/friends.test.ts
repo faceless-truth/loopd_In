@@ -196,3 +196,41 @@ describe("friends.acceptRequest — guards (H4)", () => {
     expect(db.acceptFriendRequest).toHaveBeenCalledWith(12, BOB);
   });
 });
+
+describe("friends.decline (H5)", () => {
+  beforeEach(() => {
+    vi.mocked(db.declineFriendRequest).mockResolvedValue();
+  });
+
+  it("throws NOT_FOUND when the row does not exist", async () => {
+    vi.mocked(db.getFriendshipById).mockResolvedValue(undefined);
+    const caller = appRouter.createCaller(makeCtx(BOB));
+    await expect(
+      caller.friends.decline({ requestId: 999 }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(db.declineFriendRequest).not.toHaveBeenCalled();
+  });
+
+  it("throws FORBIDDEN when the caller is not the recipient", async () => {
+    vi.mocked(db.getFriendshipById).mockResolvedValue(
+      makeFriendship({ id: 5, userId: ALICE, friendId: BOB, status: "pending" }),
+    );
+    const CAROL = 3;
+    const caller = appRouter.createCaller(makeCtx(CAROL));
+    await expect(
+      caller.friends.decline({ requestId: 5 }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(db.declineFriendRequest).not.toHaveBeenCalled();
+  });
+
+  it("deletes a pending row when the caller is the recipient", async () => {
+    vi.mocked(db.getFriendshipById).mockResolvedValue(
+      makeFriendship({ id: 5, userId: ALICE, friendId: BOB, status: "pending" }),
+    );
+    const caller = appRouter.createCaller(makeCtx(BOB));
+    await caller.friends.decline({ requestId: 5 });
+    expect(db.declineFriendRequest).toHaveBeenCalledWith(5, BOB);
+    // Declining is private: no push goes to the original requester.
+    expect(sendPushNotification).not.toHaveBeenCalled();
+  });
+});

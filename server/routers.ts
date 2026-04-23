@@ -327,6 +327,26 @@ export const appRouter = router({
         }
       }),
 
+    decline: protectedProcedure
+      .input(z.object({ requestId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const row = await db.getFriendshipById(input.requestId);
+        if (!row) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Friend request not found.",
+          });
+        }
+        if (row.friendId !== ctx.user.id) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Only the recipient can decline this request.",
+          });
+        }
+        await db.declineFriendRequest(input.requestId, ctx.user.id);
+        // Declining is private — no push to the original requester.
+      }),
+
     status: protectedProcedure
       .input(z.object({ otherUserId: z.number() }))
       .query(({ ctx, input }) => db.getFriendshipStatus(ctx.user.id, input.otherUserId)),
