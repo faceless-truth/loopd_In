@@ -66,21 +66,42 @@ const encodeState = (value: string) => {
 /**
  * Get the redirect URI for OAuth callback.
  * - Web: uses API server callback endpoint
- * - Native: uses deep link scheme
+ * - Native: uses the server's /api/oauth/mobile endpoint so the portal has a
+ *   registered HTTPS URL to redirect to. The server then redirects back to the
+ *   app via deep link after exchanging the code.
  */
 export const getRedirectUri = () => {
   if (ReactNative.Platform.OS === "web") {
     return `${getApiBaseUrl()}/api/oauth/callback`;
   } else {
-    return Linking.createURL("/oauth/callback", {
+    // Use the server mobile endpoint as the redirect URI.
+    // The deep link is encoded in the state so the server knows where to
+    // redirect the user back to after completing the OAuth exchange.
+    return `${getApiBaseUrl()}/api/oauth/mobile`;
+  }
+};
+
+/**
+ * Get the state parameter for the OAuth login URL.
+ * - Web: encodes the redirectUri (web callback)
+ * - Native: encodes the deep link so the server can redirect back to the app
+ */
+export const getOAuthState = () => {
+  if (ReactNative.Platform.OS === "web") {
+    return encodeState(getRedirectUri());
+  } else {
+    // Encode the deep link as the state — the server decodes this to redirect
+    // back to the app after the OAuth exchange is complete
+    const deepLink = Linking.createURL("/oauth/callback", {
       scheme: env.deepLinkScheme,
     });
+    return encodeState(deepLink);
   }
 };
 
 export const getLoginUrl = () => {
   const redirectUri = getRedirectUri();
-  const state = encodeState(redirectUri);
+  const state = getOAuthState();
 
   const url = new URL(`${OAUTH_PORTAL_URL}/app-auth`);
   url.searchParams.set("appId", APP_ID);

@@ -96,9 +96,24 @@ export function registerOAuthRoutes(app: Express) {
     }
   });
 
+  // GET /api/oauth/mobile — handles two cases:
+  // 1. Browser redirect from OAuth portal (code + state in query params) → redirect back to app deep link
+  // 2. Direct API call from app (code + state in query params) → return JSON with session token
   app.get("/api/oauth/mobile", async (req: Request, res: Response) => {
     const code = getQueryParam(req, "code");
     const state = getQueryParam(req, "state");
+    // appDeepLink is the deep link URI the app passed when starting OAuth
+    // It's encoded in state as base64(redirectUri) — we decode it to get the original deep link
+    // If the state decodes to a deep link (manus://...), we redirect back to it after auth
+    const isDeepLinkFlow = (() => {
+      if (!state) return false;
+      try {
+        const decoded = Buffer.from(state, "base64").toString("utf-8");
+        return decoded.startsWith("manus") && decoded.includes("://");
+      } catch {
+        return false;
+      }
+    })();
 
     if (!code || !state) {
       res.status(400).json({ error: "code and state are required" });
@@ -118,12 +133,33 @@ export function registerOAuthRoutes(app: Express) {
       const cookieOptions = getSessionCookieOptions(req);
       res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
 
+      if (isDeepLinkFlow) {
+        // Redirect back to the app via deep link, passing the session token
+        // The app's oauth/callback screen will pick this up and store the token
+        const deepLink = Buffer.from(state, "base64").toString("utf-8");
+        const userJson = Buffer.from(JSON.stringify(buildUserResponse(user))).toString("base64");
+        const redirectUrl = `${deepLink}?sessionToken=${encodeURIComponent(sessionToken)}&user=${encodeURIComponent(userJson)}`;
+        console.log("[OAuth] Redirecting to app deep link:", deepLink);
+        res.redirect(302, redirectUrl);
+        return;
+      }
+
       res.json({
         app_session_id: sessionToken,
         user: buildUserResponse(user),
       });
     } catch (error) {
       console.error("[OAuth] Mobile exchange failed", error);
+      if (isDeepLinkFlow) {
+        // Redirect back to app with error
+        try {
+          const deepLink = Buffer.from(state!, "base64").toString("utf-8");
+          res.redirect(302, `${deepLink}?error=oauth_failed`);
+        } catch {
+          res.status(500).json({ error: "OAuth mobile exchange failed" });
+        }
+        return;
+      }
       res.status(500).json({ error: "OAuth mobile exchange failed" });
     }
   });
