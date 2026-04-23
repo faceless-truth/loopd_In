@@ -171,3 +171,9 @@
 - [ ] Fix NF-3: stub or delete app/profile/[userId].tsx (orphan Stack.Screen)
 - [ ] Open PR fix/phase-1-criticals → main and merge
 - [ ] Run dedupe queries and report results
+
+## Auth Fix — Apple/Google OAuth Access Denied
+
+- [ ] Diagnose "access denied" error on Apple/Google login
+- [ ] Fix OAuth provider configuration (Apple + Google)
+- [ ] Verify login works end-to-end for both providers
