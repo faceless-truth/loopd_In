@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, or } from "drizzle-orm";
+import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   Challenge,
@@ -224,13 +224,41 @@ export async function getFeedForUser(userId: number, limit = 30) {
 export async function sendFriendRequest(userId: number, friendId: number): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.insert(friendships).values({ userId, friendId, status: "pending" });
+  // onDuplicateKeyUpdate makes the insert idempotent against races: if the
+  // unique (userId, friendId) index catches a concurrent duplicate send,
+  // we silently no-op instead of surfacing ER_DUP_ENTRY.
+  await db
+    .insert(friendships)
+    .values({ userId, friendId, status: "pending" })
+    .onDuplicateKeyUpdate({ set: { userId: sql`userId` } });
 }
 
 export async function acceptFriendRequest(id: number, friendId: number): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(friendships).set({ status: "accepted" }).where(and(eq(friendships.id, id), eq(friendships.friendId, friendId)));
+}
+
+export async function getFriendshipById(id: number): Promise<Friendship | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const rows = await db.select().from(friendships).where(eq(friendships.id, id)).limit(1);
+  return rows[0];
+}
+
+export async function declineFriendRequest(id: number, friendId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  // Only the recipient (friendId) can decline, and only a still-pending row.
+  // An accepted friendship must be unfriended via a future explicit endpoint,
+  // not via decline.
+  await db.delete(friendships).where(
+    and(
+      eq(friendships.id, id),
+      eq(friendships.friendId, friendId),
+      eq(friendships.status, "pending"),
+    ),
+  );
 }
 
 export async function getFriends(userId: number): Promise<Friendship[]> {
