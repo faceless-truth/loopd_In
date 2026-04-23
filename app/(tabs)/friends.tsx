@@ -73,6 +73,14 @@ export default function FriendsScreen() {
     onError: (err) => Alert.alert("Error", err.message),
   });
 
+  const declineRequestMutation = trpc.friends.decline.useMutation({
+    onSuccess: () => {
+      utils.friends.list.invalidate();
+      utils.friends.pending.invalidate();
+    },
+    onError: (err) => Alert.alert("Error", err.message),
+  });
+
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     await Promise.all([refetchFriends(), refetchPending()]);
@@ -359,20 +367,38 @@ export default function FriendsScreen() {
                   @{item!.username}
                 </Text>
               </View>
-              <Pressable
-                onPress={() => acceptRequestMutation.mutate({ requestId: (item as any).requestId, requesterId: (item as any).userId })}
-                disabled={acceptRequestMutation.isPending}
-                style={({ pressed }) => ({
-                  backgroundColor: pressed ? "#E05200" : "#FF5C00",
-                  borderRadius: 20,
-                  paddingHorizontal: 14,
-                  paddingVertical: 7,
-                })}
-              >
-                <Text style={{ color: "#fff", fontSize: 13, fontWeight: "600" }}>
-                  Accept
-                </Text>
-              </Pressable>
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                <Pressable
+                  onPress={() => declineRequestMutation.mutate({ requestId: (item as any).requestId })}
+                  disabled={declineRequestMutation.isPending || acceptRequestMutation.isPending}
+                  style={({ pressed }) => ({
+                    backgroundColor: pressed ? colors.border : "transparent",
+                    borderRadius: 20,
+                    paddingHorizontal: 14,
+                    paddingVertical: 7,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                  })}
+                >
+                  <Text style={{ color: colors.muted, fontSize: 13, fontWeight: "600" }}>
+                    Decline
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => acceptRequestMutation.mutate({ requestId: (item as any).requestId, requesterId: (item as any).userId })}
+                  disabled={acceptRequestMutation.isPending || declineRequestMutation.isPending}
+                  style={({ pressed }) => ({
+                    backgroundColor: pressed ? "#E05200" : "#FF5C00",
+                    borderRadius: 20,
+                    paddingHorizontal: 14,
+                    paddingVertical: 7,
+                  })}
+                >
+                  <Text style={{ color: "#fff", fontSize: 13, fontWeight: "600" }}>
+                    Accept
+                  </Text>
+                </Pressable>
+              </View>
             </View>
           )}
           ListEmptyComponent={

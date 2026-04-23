@@ -5,6 +5,7 @@ import {
   mysqlTable,
   text,
   timestamp,
+  unique,
   varchar,
 } from "drizzle-orm/mysql-core";
 
@@ -105,13 +106,22 @@ export type InsertHabitLog = typeof habitLogs.$inferInsert;
 /**
  * Friendships between users.
  */
-export const friendships = mysqlTable("friendships", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
-  friendId: int("friendId").notNull(),
-  status: mysqlEnum("status", ["pending", "accepted"]).default("pending").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
+export const friendships = mysqlTable(
+  "friendships",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId").notNull(),
+    friendId: int("friendId").notNull(),
+    status: mysqlEnum("status", ["pending", "accepted"]).default("pending").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  (t) => ({
+    userId_friendId_unique: unique("friendships_userId_friendId_unique").on(
+      t.userId,
+      t.friendId,
+    ),
+  }),
+);
 
 export type Friendship = typeof friendships.$inferSelect;
 export type InsertFriendship = typeof friendships.$inferInsert;
