@@ -14,6 +14,10 @@ const env = {
   ownerId: process.env.EXPO_PUBLIC_OWNER_OPEN_ID ?? "",
   ownerName: process.env.EXPO_PUBLIC_OWNER_NAME ?? "",
   apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL ?? "",
+  // The deployed production domain — registered with the Manus OAuth portal.
+  // The portal validates redirectUri against this domain, so native OAuth MUST
+  // use this URL (not the sandbox URL which is not registered).
+  deployedApiUrl: process.env.EXPO_PUBLIC_DEPLOYED_API_URL ?? "",
   deepLinkScheme: schemeFromBundleId,
 };
 
@@ -23,6 +27,7 @@ export const APP_ID = env.appId;
 export const OWNER_OPEN_ID = env.ownerId;
 export const OWNER_NAME = env.ownerName;
 export const API_BASE_URL = env.apiBaseUrl;
+export const DEPLOYED_API_URL = env.deployedApiUrl;
 
 /**
  * Get the API base URL, deriving from current hostname if not set.
@@ -52,7 +57,7 @@ export function getApiBaseUrl(): string {
 export const SESSION_TOKEN_KEY = "app_session_token";
 export const USER_INFO_KEY = "manus-runtime-user-info";
 
-const encodeState = (value: string) => {
+const encodeBase64 = (value: string) => {
   if (typeof globalThis.btoa === "function") {
     return globalThis.btoa(value);
   }
@@ -65,38 +70,58 @@ const encodeState = (value: string) => {
 
 /**
  * Get the redirect URI for OAuth callback.
- * - Web: uses API server callback endpoint
- * - Native: uses the server's /api/oauth/mobile endpoint so the portal has a
- *   registered HTTPS URL to redirect to. The server then redirects back to the
- *   app via deep link after exchanging the code.
+ *
+ * - Web: uses the sandbox API server callback endpoint (same-origin, no portal validation issue)
+ * - Native: uses the DEPLOYED domain's /api/oauth/mobile endpoint.
+ *
+ * WHY THE DEPLOYED DOMAIN FOR NATIVE:
+ * The Manus OAuth portal validates the redirectUri against the project's registered domains.
+ * Only the deployed domain (habittrack-eewwypnn.manus.space) is registered — the sandbox
+ * URL (3000-xxx.sg1.manus.computer) is NOT registered and the portal rejects it with
+ * "Permission denied — Redirect URI is not set".
+ *
+ * The deployed domain always serves our Express server (confirmed), so the OAuth flow works:
+ * 1. App opens portal with redirectUri = deployed domain + /api/oauth/mobile?appDeepLink=...
+ * 2. Portal validates redirectUri → ACCEPTED (deployed domain is registered)
+ * 3. Portal redirects to deployed domain with code + state
+ * 4. Deployed server exchanges code for token
+ * 5. Deployed server redirects to app deep link with session token
+ *
+ * The deep link is embedded as a query param in the redirectUri itself so the portal
+ * forwards it back to our server (standard OAuth only forwards code + state).
+ * The SDK decodes state as base64 to get the redirectUri for the token exchange —
+ * so state MUST encode the full redirectUri including the appDeepLink param.
  */
 export const getRedirectUri = () => {
   if (ReactNative.Platform.OS === "web") {
     return `${getApiBaseUrl()}/api/oauth/callback`;
   } else {
-    // Use the server mobile endpoint as the redirect URI.
-    // The deep link is encoded in the state so the server knows where to
-    // redirect the user back to after completing the OAuth exchange.
-    return `${getApiBaseUrl()}/api/oauth/mobile`;
+    // Use the deployed domain as the base for the redirect URI.
+    const base = DEPLOYED_API_URL
+      ? DEPLOYED_API_URL.replace(/\/$/, "")
+      : getApiBaseUrl();
+
+    // Embed the app deep link as a query param in the redirectUri so the portal
+    // forwards it back to our server (portal only forwards code + state, not custom params).
+    const deepLink = Linking.createURL("/oauth/callback", {
+      scheme: env.deepLinkScheme,
+    });
+    const deepLinkEncoded = encodeBase64(deepLink);
+
+    return `${base}/api/oauth/mobile?appDeepLink=${encodeURIComponent(deepLinkEncoded)}`;
   }
 };
 
 /**
  * Get the state parameter for the OAuth login URL.
- * - Web: encodes the redirectUri (web callback)
- * - Native: encodes the deep link so the server can redirect back to the app
+ * The Manus OAuth SDK's exchangeCodeForToken() decodes `state` as base64 to
+ * obtain the `redirectUri` sent in the token exchange POST to the portal.
+ * Therefore state MUST always encode the full redirectUri (including any query params).
  */
 export const getOAuthState = () => {
-  if (ReactNative.Platform.OS === "web") {
-    return encodeState(getRedirectUri());
-  } else {
-    // Encode the deep link as the state — the server decodes this to redirect
-    // back to the app after the OAuth exchange is complete
-    const deepLink = Linking.createURL("/oauth/callback", {
-      scheme: env.deepLinkScheme,
-    });
-    return encodeState(deepLink);
-  }
+  // Always encode the redirectUri in state — the SDK decodes this and sends it
+  // as the redirectUri in the token exchange request to the portal.
+  return encodeBase64(getRedirectUri());
 };
 
 export const getLoginUrl = () => {
@@ -136,7 +161,6 @@ export async function startOAuthLogin(): Promise<string | null> {
   const supported = await Linking.canOpenURL(loginUrl);
   if (!supported) {
     console.warn("[OAuth] Cannot open login URL: URL scheme not supported");
-    // 可考虑抛出错误或返回错误状态，让调用方处理
     return null;
   }
 
@@ -144,7 +168,6 @@ export async function startOAuthLogin(): Promise<string | null> {
     await Linking.openURL(loginUrl);
   } catch (error) {
     console.error("[OAuth] Failed to open login URL:", error);
-    // 可考虑抛出错误让调用方处理
   }
 
   // The OAuth callback will reopen the app via deep link.

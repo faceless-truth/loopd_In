@@ -177,3 +177,14 @@
 - [ ] Diagnose "access denied" error on Apple/Google login
 - [ ] Fix OAuth provider configuration (Apple + Google)
 - [ ] Verify login works end-to-end for both providers
+
+## OAuth Native Fix — "Permission denied: Redirect URI is not set"
+
+- [x] Diagnose root cause: portal rejects sandbox URL as redirectUri (not registered)
+- [x] Add EXPO_PUBLIC_DEPLOYED_API_URL = https://habittrack-eewwypnn.manus.space
+- [x] Update constants/oauth.ts: native uses deployed domain as redirectUri
+- [x] Embed app deep link in redirectUri as query param (portal forwards it back)
+- [x] state = base64(full redirectUri incl. appDeepLink) for SDK token exchange
+- [x] Update server /api/oauth/mobile to read appDeepLink from callback URL
+- [x] Write vitest: OAuth flow logic validates deployed domain + deep link embedding
+- [x] Write vitest: deployed API URL is accessible and serves /api/oauth/mobile
