@@ -1,3 +1,4 @@
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { COOKIE_NAME } from "../shared/const.js";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -233,6 +234,41 @@ export const appRouter = router({
     sendRequest: protectedProcedure
       .input(z.object({ friendId: z.number() }))
       .mutation(async ({ ctx, input }) => {
+        if (ctx.user.id === input.friendId) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "You cannot add yourself as a friend.",
+          });
+        }
+
+        const existing = await db.getFriendshipStatus(ctx.user.id, input.friendId);
+        if (existing) {
+          if (existing.status === "accepted") {
+            return { status: "already_friends" as const };
+          }
+          // status === "pending"
+          if (existing.userId === input.friendId) {
+            // The other user had already sent a pending request to us; treat
+            // this send as an acceptance of theirs rather than a new row.
+            await db.acceptFriendRequest(existing.id, ctx.user.id);
+            const [acceptorProfile, requesterToken] = await Promise.all([
+              db.getUserProfile(ctx.user.id),
+              db.getPushToken(existing.userId),
+            ]);
+            if (acceptorProfile && requesterToken) {
+              await sendPushNotification(
+                requesterToken,
+                "Friend request accepted! 🎉",
+                `${acceptorProfile.displayName} accepted your friend request`,
+                { url: "/(tabs)/friends" }
+              );
+            }
+            return { status: "auto_accepted" as const, friendshipId: existing.id };
+          }
+          // existing.userId === ctx.user.id: we already sent them a pending request.
+          return { status: "already_pending" as const };
+        }
+
         await db.sendFriendRequest(ctx.user.id, input.friendId);
         // Notify the recipient of the friend request
         const [senderProfile, recipientToken] = await Promise.all([
@@ -247,11 +283,32 @@ export const appRouter = router({
             { url: "/(tabs)/friends" }
           );
         }
+        return { status: "sent" as const };
       }),
 
     acceptRequest: protectedProcedure
       .input(z.object({ requestId: z.number(), requesterId: z.number().optional() }))
       .mutation(async ({ ctx, input }) => {
+        const row = await db.getFriendshipById(input.requestId);
+        if (!row) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Friend request not found.",
+          });
+        }
+        if (row.friendId !== ctx.user.id) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Only the recipient can accept this request.",
+          });
+        }
+        if (row.userId === row.friendId) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Malformed self-referencing friendship.",
+          });
+        }
+
         await db.acceptFriendRequest(input.requestId, ctx.user.id);
         // Notify the original requester that their request was accepted
         if (input.requesterId && input.requesterId !== ctx.user.id) {
